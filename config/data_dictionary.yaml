@@ -1,0 +1,180 @@
+SC_close:
+  required: true
+  source_primary: AKShare
+  source_backup: INE / 上期所官网
+  unit: CNY/barrel
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, stale_check, range_check]
+  fail_action: report_as_missing
+SC_settlement:
+  required: true
+  source_primary: INE / 上期所官网
+  source_backup: AKShare
+  unit: CNY/barrel
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, stale_check, range_check]
+  fail_action: use_close_with_warning
+SC_volume:
+  required: true
+  source_primary: AKShare
+  source_backup: INE / 上期所官网
+  unit: contracts
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, stale_check, range_check]
+  fail_action: mark_warning
+SC_open_interest:
+  required: true
+  source_primary: AKShare
+  source_backup: INE / 上期所官网
+  unit: contracts
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, stale_check, range_check]
+  fail_action: mark_warning
+SC_near_price:
+  required: true
+  source_primary: AKShare
+  source_backup: INE / 上期所官网
+  unit: CNY/barrel
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, stale_check, range_check]
+  fail_action: report_as_missing
+SC_next_price:
+  required: true
+  source_primary: AKShare
+  source_backup: INE / 上期所官网
+  unit: CNY/barrel
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, stale_check, range_check]
+  fail_action: report_as_missing
+SC_calendar_spread:
+  required: true
+  source_primary: Python calculation
+  source_backup: manual calculation
+  unit: CNY/barrel
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, spread_check]
+  fail_action: skip_calculation
+Brent_close:
+  required: true
+  source_primary: yfinance
+  source_backup: FRED / EIA spot reference
+  unit: USD/barrel
+  frequency: daily
+  update_time: after_foreign_close
+  quality_checks: [missing_check, stale_check, timezone_check]
+  fail_action: use_latest_with_warning
+WTI_close:
+  required: true
+  source_primary: yfinance
+  source_backup: EIA / FRED spot reference
+  unit: USD/barrel
+  frequency: daily
+  update_time: after_foreign_close
+  quality_checks: [missing_check, stale_check, timezone_check]
+  fail_action: use_latest_with_warning
+USD_CNY:
+  required: true
+  source_primary: AKShare / FRED
+  source_backup: 中国外汇交易中心
+  unit: CNY/USD
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, stale_check, range_check]
+  fail_action: use_mid_price_with_warning
+SC_Brent_spread_simple:
+  required: true
+  source_primary: Python calculation
+  source_backup: manual calculation
+  unit: USD/barrel
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, spread_check, unit_check]
+  fail_action: skip_calculation
+SC_WTI_spread_simple:
+  required: true
+  source_primary: Python calculation
+  source_backup: manual calculation
+  unit: USD/barrel
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, spread_check, unit_check]
+  fail_action: skip_calculation
+EIA_crude_inventory:
+  required: true
+  source_primary: EIA API
+  source_backup: EIA webpage
+  unit: million_barrels
+  frequency: weekly
+  update_time: after_eia_release
+  quality_checks: [missing_check, stale_check, revision_check]
+  fail_action: use_previous_with_warning
+EIA_gasoline_inventory:
+  required: false
+  source_primary: EIA API
+  source_backup: EIA webpage
+  unit: million_barrels
+  frequency: weekly
+  update_time: after_eia_release
+  quality_checks: [missing_check, stale_check, revision_check]
+  fail_action: use_previous_with_warning
+EIA_distillate_inventory:
+  required: false
+  source_primary: EIA API
+  source_backup: EIA webpage
+  unit: million_barrels
+  frequency: weekly
+  update_time: after_eia_release
+  quality_checks: [missing_check, stale_check, revision_check]
+  fail_action: use_previous_with_warning
+OPEC_monthly_summary:
+  required: false
+  source_primary: OPEC website manual summary
+  source_backup: public media summary
+  unit: text
+  frequency: monthly
+  update_time: after_report_release
+  quality_checks: [stale_check, source_conflict_check]
+  fail_action: mark_missing
+IEA_monthly_summary:
+  required: false
+  source_primary: IEA public content manual summary
+  source_backup: public media summary
+  unit: text
+  frequency: monthly
+  update_time: after_report_release
+  quality_checks: [stale_check, source_conflict_check]
+  fail_action: mark_missing
+exchange_notice:
+  required: false
+  source_primary: INE / 上期所官网
+  source_backup: 期货公司公告
+  unit: text
+  frequency: ad_hoc
+  update_time: after_notice_release
+  quality_checks: [stale_check, source_conflict_check]
+  fail_action: write_no_update
+important_oil_news:
+  required: false
+  source_primary: manual news summary
+  source_backup: 财联社 / 期货日报 / public media
+  unit: text
+  frequency: daily
+  update_time: before_report_generation
+  quality_checks: [source_conflict_check, timezone_check]
+  fail_action: lower_confidence
+manual_notes:
+  required: false
+  source_primary: analyst manual input
+  source_backup: none
+  unit: text
+  frequency: daily
+  update_time: before_report_generation
+  quality_checks: []
+  fail_action: allow_empty

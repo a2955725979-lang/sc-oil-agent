@@ -1,0 +1,7 @@
+database:
+  path: db/sc_oil_research.sqlite
+
+report:
+  default_status: warning
+  calculation_version: simple_fx_adjusted_v1
+  prompt_version: daily_report_prompt_v1

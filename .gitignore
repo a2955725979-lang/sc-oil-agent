@@ -1,0 +1,9 @@
+.DS_Store
+**/.DS_Store
+__pycache__/
+*.pyc
+.env
+db/*.sqlite
+!db/.gitkeep
+logs/*.log
+/sc-oil-agent/
