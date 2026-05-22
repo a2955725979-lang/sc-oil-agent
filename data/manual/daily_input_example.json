@@ -1,0 +1,190 @@
+{
+  "report_date": "2026-05-22",
+  "context": {
+    "required_for_topic": [],
+    "example_notice": "This file is a format example only. Values are demonstration data, not real market data, and must not be used for research, trading, or market judgment."
+  },
+  "fields": {
+    "SC_close": {
+      "value": 620.5,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "SC_settlement": {
+      "value": 619.8,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "SC_volume": {
+      "value": 128000,
+      "metadata": {
+        "unit": "contracts",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "SC_open_interest": {
+      "value": 54000,
+      "metadata": {
+        "unit": "contracts",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "SC_near_price": {
+      "value": 621.0,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "SC_next_price": {
+      "value": 617.2,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "SC_calendar_spread": {
+      "value": 3.8,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "sc_date": "2026-05-22",
+        "external_date": "2026-05-22",
+        "fx_date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "Brent_close": {
+      "value": 82.4,
+      "metadata": {
+        "unit": "USD/barrel",
+        "date": "2026-05-22",
+        "timezone": "Europe/London"
+      }
+    },
+    "WTI_close": {
+      "value": 78.6,
+      "metadata": {
+        "unit": "USD/barrel",
+        "date": "2026-05-22",
+        "timezone": "America/New_York"
+      }
+    },
+    "USD_CNY": {
+      "value": 7.18,
+      "metadata": {
+        "unit": "CNY/USD",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "SC_Brent_spread_simple": {
+      "value": 4.02,
+      "metadata": {
+        "unit": "USD/barrel",
+        "sc_date": "2026-05-22",
+        "external_date": "2026-05-22",
+        "fx_date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "SC_WTI_spread_simple": {
+      "value": 7.82,
+      "metadata": {
+        "unit": "USD/barrel",
+        "sc_date": "2026-05-22",
+        "external_date": "2026-05-22",
+        "fx_date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "EIA_crude_inventory": {
+      "value": 443.2,
+      "metadata": {
+        "unit": "million_barrels",
+        "date": "2026-05-17",
+        "publish_time": "2026-05-20 22:30:00",
+        "timezone": "America/New_York"
+      }
+    },
+    "EIA_gasoline_inventory": {
+      "value": 225.1,
+      "metadata": {
+        "unit": "million_barrels",
+        "date": "2026-05-17",
+        "publish_time": "2026-05-20 22:30:00",
+        "timezone": "America/New_York"
+      }
+    },
+    "EIA_distillate_inventory": {
+      "value": 116.4,
+      "metadata": {
+        "unit": "million_barrels",
+        "date": "2026-05-17",
+        "publish_time": "2026-05-20 22:30:00",
+        "timezone": "America/New_York"
+      }
+    },
+    "OPEC_monthly_summary": {
+      "value": "Demo summary: OPEC supply assumptions were broadly steady in the latest public monthly note.",
+      "metadata": {
+        "unit": "text",
+        "date": "2026-05-10",
+        "publish_time": "2026-05-10 18:00:00",
+        "timezone": "Europe/Vienna"
+      }
+    },
+    "IEA_monthly_summary": {
+      "value": "Demo summary: IEA demand comments were mixed, with the example note emphasizing uncertainty.",
+      "metadata": {
+        "unit": "text",
+        "date": "2026-05-15",
+        "publish_time": "2026-05-15 17:00:00",
+        "timezone": "Europe/Paris"
+      }
+    },
+    "exchange_notice": {
+      "value": "Demo notice: no material exchange rule change in this example file.",
+      "metadata": {
+        "unit": "text",
+        "date": "2026-05-22",
+        "publish_time": "2026-05-22 15:30:00",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "important_oil_news": {
+      "value": "Demo news: sample headline package for validating manual news input structure.",
+      "metadata": {
+        "unit": "text",
+        "date": "2026-05-22",
+        "publish_time": "2026-05-22 16:30:00",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "manual_notes": {
+      "value": "Demo note: replace this with the analyst's real daily observation before production use.",
+      "metadata": {
+        "unit": "text",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "Oman_price_experimental": {
+      "value": 81.7,
+      "metadata": {
+        "unit": "USD/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Dubai"
+      }
+    }
+  }
+}

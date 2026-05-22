@@ -20,3 +20,37 @@
 4. Evidence ID 自动化
 5. 接入 Agent 生成解释
 6. 连续 10 个交易日试运行
+
+## 每日数据质检
+
+`data/manual/daily_input_example.json` 只是格式示例，不是真实市场数据，不能用于研究、交易或行情判断。
+
+示例文件用于演示每日输入 JSON 的结构，以及质检器如何输出 `pass / warning / fail`。其中：
+
+- `Oman_price_experimental` 用于演示“未在数据字典中定义的额外字段 warning”，不会进入正式字段质检。
+- `OPEC_monthly_summary` 和 `IEA_monthly_summary` 的 warning 来自当前 v1 的 `source_conflict_check` 占位逻辑，不是 `revision_check`。
+- 示例预期结果是 `overall_status: warning`，并且 `fail: 0`。
+
+运行示例质检：
+
+```bash
+python src/validators/run_quality_validation.py --input data/manual/daily_input_example.json --output data/processed/quality_report_example.json
+```
+
+日常使用时，可以复制示例文件并改名：
+
+```text
+data/manual/daily_input_YYYY-MM-DD.json
+```
+
+然后填入当天真实数据，再运行：
+
+```bash
+python src/validators/run_quality_validation.py --report-date YYYY-MM-DD
+```
+
+默认输出位置：
+
+```text
+data/processed/quality_report_YYYY-MM-DD.json
+```
