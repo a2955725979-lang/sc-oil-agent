@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS fx_rates;
 DROP TABLE IF EXISTS spread_table;
 DROP TABLE IF EXISTS inventory_data;
 DROP TABLE IF EXISTS china_fundamental_data;
+DROP TABLE IF EXISTS sentiment_data;
 DROP TABLE IF EXISTS oil_events;
 DROP TABLE IF EXISTS evidence_database;
 DROP TABLE IF EXISTS research_reports;
@@ -139,6 +140,29 @@ CREATE TABLE china_fundamental_data (
     UNIQUE (date, source)
 );
 
+CREATE TABLE sentiment_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    data_time TEXT,
+    sentiment_source TEXT NOT NULL,
+    sentiment_type TEXT,
+    related_asset TEXT DEFAULT 'SC',
+    sentiment_score REAL,
+    sentiment_label TEXT CHECK (
+        sentiment_label IS NULL
+        OR sentiment_label IN ('positive', 'neutral', 'negative', '利多', '中性', '利空')
+    ),
+    sample_size INTEGER,
+    summary TEXT,
+    keywords TEXT,
+    source TEXT NOT NULL,
+    source_status TEXT NOT NULL DEFAULT 'warning'
+        CHECK (source_status IN ('pass', 'warning', 'fail')),
+    publish_time TEXT,
+    created_time TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (date, sentiment_source, related_asset, source)
+);
+
 CREATE TABLE oil_events (
     event_id TEXT PRIMARY KEY,
     event_time TEXT,
@@ -244,6 +268,9 @@ CREATE INDEX idx_spread_table_date_contract
 CREATE INDEX idx_inventory_data_date_region
     ON inventory_data (date, country_or_region);
 
+CREATE INDEX idx_sentiment_data_date_asset
+    ON sentiment_data (date, related_asset);
+
 CREATE INDEX idx_oil_events_time_type
     ON oil_events (event_time, event_type);
 
@@ -255,4 +282,3 @@ CREATE INDEX idx_evidence_snapshot
 
 CREATE INDEX idx_reports_date
     ON research_reports (date);
-
