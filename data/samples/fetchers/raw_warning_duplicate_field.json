@@ -1,0 +1,45 @@
+{
+  "contract_version": "raw_data_contract_v1",
+  "report_date": "2026-05-22",
+  "source_name": "sample_source",
+  "fetcher_name": "sample_fetcher",
+  "fetcher_version": "fetcher_contract_v1",
+  "fetched_at": "2026-05-22T16:00:00+08:00",
+  "fetch_status": "warning",
+  "records": [
+    {
+      "field": "SC_close",
+      "value": 620.5,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "close",
+        "source_level": "test",
+        "url_or_reference": "sample"
+      },
+      "raw_payload": {
+        "close": 620.5
+      }
+    },
+    {
+      "field": "SC_close",
+      "value": 999.9,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "duplicate_close",
+        "source_level": "test",
+        "url_or_reference": "sample"
+      },
+      "raw_payload": {
+        "duplicate_close": 999.9
+      }
+    }
+  ],
+  "warnings": [
+    "sample duplicate field warning"
+  ],
+  "errors": []
+}

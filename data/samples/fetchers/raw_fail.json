@@ -1,0 +1,14 @@
+{
+  "contract_version": "raw_data_contract_v1",
+  "report_date": "2026-05-22",
+  "source_name": "sample_source",
+  "fetcher_name": "sample_fetcher",
+  "fetcher_version": "fetcher_contract_v1",
+  "fetched_at": "2026-05-22T16:00:00+08:00",
+  "fetch_status": "fail",
+  "records": [],
+  "warnings": [],
+  "errors": [
+    "sample structured fetch failure"
+  ]
+}

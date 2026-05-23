@@ -1,0 +1,175 @@
+{
+  "contract_version": "raw_data_contract_v1",
+  "report_date": "2026-05-22",
+  "source_name": "sample_source",
+  "fetcher_name": "sample_fetcher",
+  "fetcher_version": "fetcher_contract_v1",
+  "fetched_at": "2026-05-22T16:00:00+08:00",
+  "fetch_status": "pass",
+  "records": [
+    {
+      "field": "SC_close",
+      "value": 620.5,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "close",
+        "source_level": "test",
+        "url_or_reference": "sample"
+      },
+      "raw_payload": {
+        "close": 620.5
+      }
+    },
+    {
+      "field": "SC_near_price",
+      "value": 621.0,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "near_close",
+        "source_level": "test",
+        "url_or_reference": "sample"
+      },
+      "raw_payload": {
+        "near_close": 621.0
+      }
+    },
+    {
+      "field": "SC_next_price",
+      "value": 617.2,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "next_close",
+        "source_level": "test",
+        "url_or_reference": "sample"
+      },
+      "raw_payload": {
+        "next_close": 617.2
+      }
+    },
+    {
+      "field": "USD_CNY",
+      "value": 7.18,
+      "metadata": {
+        "unit": "CNY/USD",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "usd_cny",
+        "source_level": "test",
+        "url_or_reference": "sample"
+      },
+      "raw_payload": {
+        "usd_cny": 7.18
+      }
+    },
+    {
+      "field": "Brent_close",
+      "value": 82.4,
+      "metadata": {
+        "unit": "USD/barrel",
+        "date": "2026-05-22",
+        "timezone": "Europe/London",
+        "source_field": "brent_close",
+        "source_level": "test",
+        "url_or_reference": "sample"
+      },
+      "raw_payload": {
+        "brent_close": 82.4
+      }
+    },
+    {
+      "field": "WTI_close",
+      "value": 78.6,
+      "metadata": {
+        "unit": "USD/barrel",
+        "date": "2026-05-22",
+        "timezone": "America/New_York",
+        "source_field": "wti_close",
+        "source_level": "test",
+        "url_or_reference": "sample"
+      },
+      "raw_payload": {
+        "wti_close": 78.6
+      }
+    },
+    {
+      "field": "SC_USD",
+      "value": 86.4206,
+      "metadata": {
+        "unit": "USD/barrel",
+        "sc_date": "2026-05-22",
+        "external_date": "2026-05-22",
+        "fx_date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "sc_usd",
+        "source_level": "derived",
+        "url_or_reference": "sample",
+        "calculation_method": "simple_fx_adjusted_v1"
+      },
+      "raw_payload": {
+        "sc_usd": 86.4206
+      }
+    },
+    {
+      "field": "SC_calendar_spread",
+      "value": 3.8,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "sc_date": "2026-05-22",
+        "external_date": "2026-05-22",
+        "fx_date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "calendar_spread",
+        "source_level": "derived",
+        "url_or_reference": "sample",
+        "calculation_method": "simple_fx_adjusted_v1"
+      },
+      "raw_payload": {
+        "calendar_spread": 3.8
+      }
+    },
+    {
+      "field": "SC_Brent_spread_simple",
+      "value": 4.0206,
+      "metadata": {
+        "unit": "USD/barrel",
+        "sc_date": "2026-05-22",
+        "external_date": "2026-05-22",
+        "fx_date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "sc_brent_spread",
+        "source_level": "derived",
+        "url_or_reference": "sample",
+        "calculation_method": "simple_fx_adjusted_v1"
+      },
+      "raw_payload": {
+        "sc_brent_spread": 4.0206
+      }
+    },
+    {
+      "field": "SC_WTI_spread_simple",
+      "value": 7.8206,
+      "metadata": {
+        "unit": "USD/barrel",
+        "sc_date": "2026-05-22",
+        "external_date": "2026-05-22",
+        "fx_date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "source_field": "sc_wti_spread",
+        "source_level": "derived",
+        "url_or_reference": "sample",
+        "calculation_method": "simple_fx_adjusted_v1"
+      },
+      "raw_payload": {
+        "sc_wti_spread": 7.8206
+      }
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}

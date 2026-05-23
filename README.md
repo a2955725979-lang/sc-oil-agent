@@ -5,8 +5,10 @@
 ## 目录
 
 - `docs/`：系统设计文档分册
+- `docs/fetcher_design.md`：v0.5 fetcher 接口与 raw_data 转换契约
 - `docs/validation.md`：本地 MVP 流水线 warning / fail 验证记录
 - `config/data_dictionary.yaml`：MVP 字段数据字典
+- `data/samples/fetchers/`：test-only 的 fetcher raw_data 契约样例
 - `data/samples/validation/`：test-only 的 pass / warning / fail 验证样例
 - `templates/`：日报、周报、事件点评模板
 - `prompts/`：Agent 系统提示词
@@ -164,3 +166,9 @@ python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD --report-id R
 ```
 
 pass / warning / fail 的完整验收命令见 `docs/validation.md`。`data/samples/validation/` 下的样例不是市场数据，不能用于研究、交易或行情判断。
+
+## Fetcher 契约
+
+v0.5 先定义真实数据源接入前的 fetcher 契约，不直接接 AKShare、EIA、FRED 或 yfinance。接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。
+
+fetcher 样例同样不是市场数据，不能用于研究、交易或行情判断。
