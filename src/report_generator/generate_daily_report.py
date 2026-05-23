@@ -39,9 +39,11 @@ def generate_daily_report(
     quality_report_path: str | Path,
     output_path: str | Path | None = None,
     data_snapshot_id: str | None = None,
+    evidence_list_path: str | Path | None = None,
 ) -> str:
     daily_input = load_json(daily_input_path)
     quality_report = load_json(quality_report_path)
+    evidence_report = load_json(evidence_list_path) if evidence_list_path else None
     report_date = _report_date(daily_input, quality_report)
     output = Path(output_path) if output_path else build_default_output_path(report_date)
 
@@ -49,6 +51,7 @@ def generate_daily_report(
         daily_input=daily_input,
         quality_report=quality_report,
         data_snapshot_id=data_snapshot_id or "未写入 data_snapshot",
+        evidence_report=evidence_report,
     )
     _assert_no_forbidden_terms(markdown)
 
@@ -61,6 +64,7 @@ def render_daily_report(
     daily_input: dict[str, Any],
     quality_report: dict[str, Any],
     data_snapshot_id: str,
+    evidence_report: dict[str, Any] | None = None,
 ) -> str:
     report_date = _report_date(daily_input, quality_report)
     fields = daily_input.get("fields", {})
@@ -147,16 +151,14 @@ def render_daily_report(
         f"- 人工备注：{_field_value(fields, 'manual_notes')}",
         "- 信息边界：仅使用输入文件中的公告、新闻和人工备注，不自动搜索。",
         "",
-        "## 9. 证据链",
-        "- 正式 Evidence ID 尚未自动生成；以下为字段级数据依据占位。",
-        f"- 行情字段：SC_close={_field_value(fields, 'SC_close')}；SC_settlement={_field_value(fields, 'SC_settlement')}",
-        f"- 期限结构字段：SC_near_price={_field_value(fields, 'SC_near_price')}；SC_next_price={_field_value(fields, 'SC_next_price')}；SC_calendar_spread={_field_value(fields, 'SC_calendar_spread')}",
-        f"- 外盘和汇率字段：Brent_close={_field_value(fields, 'Brent_close')}；WTI_close={_field_value(fields, 'WTI_close')}；USD_CNY={_field_value(fields, 'USD_CNY')}",
-        f"- 库存字段：EIA_crude_inventory={_field_value(fields, 'EIA_crude_inventory')}",
-        f"- 新闻字段：important_oil_news={_field_value(fields, 'important_oil_news')}",
-        "",
-        "## 10. 风险反例、下一交易日关注与人工审核区",
     ]
+    lines.extend(_render_evidence_section(fields, evidence_report))
+    lines.extend(
+        [
+            "",
+            "## 10. 风险反例、下一交易日关注与人工审核区",
+        ]
+    )
 
     if status == "fail":
         lines.extend(
@@ -209,6 +211,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--quality-report", required=True, help="Quality report JSON path.")
     parser.add_argument("--output", help="Markdown output path.")
     parser.add_argument("--data-snapshot-id", help="Optional data snapshot id.")
+    parser.add_argument("--evidence-list", help="Optional field-level Evidence List JSON path.")
     return parser.parse_args(argv)
 
 
@@ -220,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
             quality_report_path=args.quality_report,
             output_path=args.output,
             data_snapshot_id=args.data_snapshot_id,
+            evidence_list_path=args.evidence_list,
         )
     except (DailyReportGenerationError, OSError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}")
@@ -266,6 +270,58 @@ def _missing_fields(field_results: list[Any]) -> list[str]:
 
 def _join_or_none(items: list[str]) -> str:
     return "、".join(items) if items else "无"
+
+
+def _render_evidence_section(
+    fields: dict[str, Any],
+    evidence_report: dict[str, Any] | None,
+) -> list[str]:
+    lines = ["## 9. 证据链"]
+    if evidence_report is None:
+        lines.extend(
+            [
+                "- 正式 Evidence ID 尚未自动生成；以下为字段级数据依据占位。",
+                f"- 行情字段：SC_close={_field_value(fields, 'SC_close')}；SC_settlement={_field_value(fields, 'SC_settlement')}",
+                f"- 期限结构字段：SC_near_price={_field_value(fields, 'SC_near_price')}；SC_next_price={_field_value(fields, 'SC_next_price')}；SC_calendar_spread={_field_value(fields, 'SC_calendar_spread')}",
+                f"- 外盘和汇率字段：Brent_close={_field_value(fields, 'Brent_close')}；WTI_close={_field_value(fields, 'WTI_close')}；USD_CNY={_field_value(fields, 'USD_CNY')}",
+                f"- 库存字段：EIA_crude_inventory={_field_value(fields, 'EIA_crude_inventory')}",
+                f"- 新闻字段：important_oil_news={_field_value(fields, 'important_oil_news')}",
+            ]
+        )
+        return lines
+
+    evidence_items = evidence_report.get("evidence_list", [])
+    if not isinstance(evidence_items, list):
+        evidence_items = []
+
+    lines.extend(
+        [
+            "- Evidence List v1 为字段级证据，不是研究结论证据。",
+            "- Evidence List v1 不能直接支撑方向性研究或交易判断。",
+        ]
+    )
+    if not evidence_items:
+        lines.append("- 未找到可引用的字段级 Evidence。")
+        return lines
+
+    for item in evidence_items:
+        if not isinstance(item, dict):
+            continue
+        warning_note = ""
+        if item.get("source_status") == "warning":
+            warning_note = "；warning evidence，仅作降级依据，需人工复核"
+        lines.append(
+            "- "
+            f"{item.get('evidence_id', 'EVID-UNKNOWN')} "
+            f"[{item.get('evidence_type', 'unknown')}] "
+            f"{item.get('field', 'unknown')}="
+            f"{item.get('normalized_value', item.get('raw_value', '未提供'))} "
+            f"{item.get('unit') or ''}"
+            f"；source_status={item.get('source_status', 'warning')}"
+            f"；confidence={item.get('confidence', 'low')}"
+            f"{warning_note}"
+        )
+    return lines
 
 
 def _downgrade_reason(status: str, warnings: list[Any], errors: list[Any]) -> str:

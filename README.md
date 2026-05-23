@@ -71,6 +71,20 @@ python src/validators/run_quality_validation.py --input data/manual/daily_input_
 python src/report_generator/generate_daily_report.py --daily-input data/manual/daily_input_example.json --quality-report data/processed/quality_report_example.json --output reports/daily/SC_daily_example.md --data-snapshot-id SNAP-EXAMPLE-001
 ```
 
+可选生成字段级 Evidence List：
+
+```bash
+python src/evidence/generate_evidence_list.py --daily-input data/manual/daily_input_example.json --quality-report data/processed/quality_report_example.json --output data/processed/evidence_list_example.json --data-snapshot-id SNAP-EXAMPLE-001
+```
+
+然后让日报引用 Evidence List：
+
+```bash
+python src/report_generator/generate_daily_report.py --daily-input data/manual/daily_input_example.json --quality-report data/processed/quality_report_example.json --evidence-list data/processed/evidence_list_example.json --output reports/daily/SC_daily_example.md --data-snapshot-id SNAP-EXAMPLE-001
+```
+
+Evidence List v1 只是字段级证据，不是研究结论证据，不能直接支撑方向性研究或交易判断。
+
 `data/manual/daily_input_example.json` 仍然只是格式示例，不是真实市场数据，不能用于研究、交易或行情判断。
 
 当 `overall_status = warning` 时，日报会保留正常结构，但必须写出结论降级原因。当 `overall_status = fail` 时，日报只生成数据失败说明，不输出方向性结论。

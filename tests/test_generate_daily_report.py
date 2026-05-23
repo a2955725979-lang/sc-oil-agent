@@ -20,6 +20,7 @@ from src.report_generator.generate_daily_report import (  # noqa: E402
     generate_daily_report,
     main,
 )
+from src.evidence.generate_evidence_list import generate_evidence_list  # noqa: E402
 from src.validators.run_quality_validation import run_validation  # noqa: E402
 
 
@@ -165,6 +166,42 @@ def test_fail_report_has_no_directional_conclusion() -> None:
         assert_not_contains(markdown, term, "fail report should not contain forbidden trading terms")
 
 
+def test_report_can_reference_field_level_evidence_list() -> None:
+    input_path = PROJECT_ROOT / "data" / "manual" / "daily_input_example.json"
+    dictionary_path = PROJECT_ROOT / "config" / "data_dictionary.yaml"
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        quality_report_path = root / "quality_report_example.json"
+        evidence_list_path = root / "evidence_list_example.json"
+        output_path = root / "SC_daily_with_evidence.md"
+
+        run_validation(
+            input_path=input_path,
+            data_dictionary_path=dictionary_path,
+            output_path=quality_report_path,
+        )
+        generate_evidence_list(
+            daily_input_path=input_path,
+            quality_report_path=quality_report_path,
+            output_path=evidence_list_path,
+            data_snapshot_id="SNAP-EXAMPLE-001",
+        )
+        markdown = generate_daily_report(
+            daily_input_path=input_path,
+            quality_report_path=quality_report_path,
+            output_path=output_path,
+            data_snapshot_id="SNAP-EXAMPLE-001",
+            evidence_list_path=evidence_list_path,
+        )
+
+    assert_contains(markdown, "EVID-20260522-001", "report should reference evidence ids")
+    assert_contains(markdown, "Evidence List v1 为字段级证据", "field-level scope should be explicit")
+    assert_contains(markdown, "source_status=warning", "warning evidence status should be visible")
+    assert_contains(markdown, "warning evidence，仅作降级依据", "warning evidence should be downgraded")
+    assert_not_contains(markdown, "强依据", "warning evidence should not be described as strong evidence")
+
+
 def test_cli_generates_report_with_custom_paths() -> None:
     input_path = PROJECT_ROOT / "data" / "manual" / "daily_input_example.json"
     dictionary_path = PROJECT_ROOT / "config" / "data_dictionary.yaml"
@@ -201,6 +238,7 @@ def run() -> None:
     tests = [
         test_example_warning_report_contains_required_sections,
         test_fail_report_has_no_directional_conclusion,
+        test_report_can_reference_field_level_evidence_list,
         test_cli_generates_report_with_custom_paths,
     ]
     for test in tests:
