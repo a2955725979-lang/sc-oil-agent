@@ -166,6 +166,71 @@ def test_fail_report_has_no_directional_conclusion() -> None:
         assert_not_contains(markdown, term, "fail report should not contain forbidden trading terms")
 
 
+def test_extended_forbidden_terms_are_blocked() -> None:
+    expected_terms = ["做多", "做空", "开仓", "止盈", "止损", "加仓", "满仓"]
+    for term in expected_terms:
+        assert_equal(term in FORBIDDEN_TERMS, True, f"{term} should be forbidden")
+
+
+def test_quality_report_snapshot_id_is_used_when_cli_id_is_missing() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        input_path = root / "daily_input.json"
+        quality_report_path = root / "quality_report.json"
+        output_path = root / "SC_daily.md"
+
+        write_json(input_path, {"report_date": "2026-05-22", "fields": {}})
+        write_json(
+            quality_report_path,
+            {
+                "report_date": "2026-05-22",
+                "data_snapshot_id": "SNAP-FROM-QUALITY",
+                "overall_status": "warning",
+                "field_results": [],
+                "warnings": [],
+                "errors": [],
+            },
+        )
+
+        markdown = generate_daily_report(
+            daily_input_path=input_path,
+            quality_report_path=quality_report_path,
+            output_path=output_path,
+        )
+
+    assert_contains(markdown, "数据快照编号：SNAP-FROM-QUALITY", "quality report snapshot id should be used")
+
+
+def test_cli_snapshot_id_overrides_quality_report_snapshot_id() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        input_path = root / "daily_input.json"
+        quality_report_path = root / "quality_report.json"
+        output_path = root / "SC_daily.md"
+
+        write_json(input_path, {"report_date": "2026-05-22", "fields": {}})
+        write_json(
+            quality_report_path,
+            {
+                "report_date": "2026-05-22",
+                "data_snapshot_id": "SNAP-FROM-QUALITY",
+                "overall_status": "warning",
+                "field_results": [],
+                "warnings": [],
+                "errors": [],
+            },
+        )
+
+        markdown = generate_daily_report(
+            daily_input_path=input_path,
+            quality_report_path=quality_report_path,
+            output_path=output_path,
+            data_snapshot_id="SNAP-FROM-CLI",
+        )
+
+    assert_contains(markdown, "数据快照编号：SNAP-FROM-CLI", "CLI snapshot id should win")
+
+
 def test_report_can_reference_field_level_evidence_list() -> None:
     input_path = PROJECT_ROOT / "data" / "manual" / "daily_input_example.json"
     dictionary_path = PROJECT_ROOT / "config" / "data_dictionary.yaml"
@@ -238,6 +303,9 @@ def run() -> None:
     tests = [
         test_example_warning_report_contains_required_sections,
         test_fail_report_has_no_directional_conclusion,
+        test_extended_forbidden_terms_are_blocked,
+        test_quality_report_snapshot_id_is_used_when_cli_id_is_missing,
+        test_cli_snapshot_id_overrides_quality_report_snapshot_id,
         test_report_can_reference_field_level_evidence_list,
         test_cli_generates_report_with_custom_paths,
     ]

@@ -14,7 +14,20 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-FORBIDDEN_TERMS = ["买入", "卖出", "必涨", "必跌", "稳赚"]
+FORBIDDEN_TERMS = [
+    "买入",
+    "卖出",
+    "必涨",
+    "必跌",
+    "稳赚",
+    "做多",
+    "做空",
+    "开仓",
+    "止盈",
+    "止损",
+    "加仓",
+    "满仓",
+]
 
 
 class DailyReportGenerationError(RuntimeError):
@@ -50,7 +63,7 @@ def generate_daily_report(
     markdown = render_daily_report(
         daily_input=daily_input,
         quality_report=quality_report,
-        data_snapshot_id=data_snapshot_id or "未写入 data_snapshot",
+        data_snapshot_id=_resolve_data_snapshot_id(data_snapshot_id, quality_report),
         evidence_report=evidence_report,
     )
     _assert_no_forbidden_terms(markdown)
@@ -270,6 +283,18 @@ def _missing_fields(field_results: list[Any]) -> list[str]:
 
 def _join_or_none(items: list[str]) -> str:
     return "、".join(items) if items else "无"
+
+
+def _resolve_data_snapshot_id(
+    cli_data_snapshot_id: str | None,
+    quality_report: dict[str, Any],
+) -> str:
+    if cli_data_snapshot_id:
+        return cli_data_snapshot_id
+    report_snapshot_id = quality_report.get("data_snapshot_id")
+    if report_snapshot_id:
+        return str(report_snapshot_id)
+    return "未写入 data_snapshot"
 
 
 def _render_evidence_section(

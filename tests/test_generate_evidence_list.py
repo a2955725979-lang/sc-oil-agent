@@ -93,7 +93,11 @@ def test_example_generates_typed_field_level_evidence() -> None:
         "Oman_price_experimental",
         "extra field should be skipped",
     )
-    assert_equal(items[0]["evidence_id"], "EVID-20260522-001", "evidence id should be stable")
+    assert_equal(
+        items[0]["evidence_id"],
+        "EVID-20260522-001",
+        "evidence id should be stable for the same input field order",
+    )
 
 
 def test_fail_fields_do_not_generate_evidence() -> None:
