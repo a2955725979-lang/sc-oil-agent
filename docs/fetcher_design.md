@@ -1,6 +1,6 @@
 # Fetcher Design
 
-本文件定义 v0.5 的 fetcher 接口设计。当前阶段只做契约层，不接 AKShare、EIA、FRED、yfinance 或任何真实外部 API。
+本文件定义 v0.5 的 fetcher 接口设计。当前阶段先完成契约层，并提供 AKShare SC 单源行情 fetcher v1；其他真实数据源暂不接入。
 
 ## 职责边界
 
@@ -105,9 +105,35 @@ test / manual / official / third_party / derived
 - 同一个 raw_data 内重复字段会产生 `conversion_warnings`，并保留第一条。
 - 缺少 `records` 或 record 缺少 `field/value` 会进入 `conversion_errors`。
 
+## AKShare SC 行情 Fetcher v1
+
+第一个真实行情 fetcher 使用 AKShare 的交易所日行情接口：
+
+```text
+ak.get_futures_daily(start_date=YYYYMMDD, end_date=YYYYMMDD, market="INE")
+```
+
+CLI 示例：
+
+```bash
+python src/fetchers/akshare_sc.py --report-date 2026-01-15 --output data/raw/akshare_sc_2026-01-15.json
+```
+
+v1 规则：
+
+- 主路径优先适配字段：`symbol`、`date`、`close`、`volume`、`open_interest`、`settle`、`variety`。
+- `SC_settlement` 的来源字段是 `settle`，不是 `settlement`。
+- SC 合约识别兼容 `SC2602` 和 `sc2602`；内部 `contract` 统一大写，`raw_symbol` 保留原始值。
+- 主力合约默认按成交量最大选择。
+- 如果成交量最大合约与持仓量最大合约不一致，输出 warning。
+- `SC_near_price` 和 `SC_next_price` 从有成交量或持仓量的 SC 合约中按合约月份排序选择最近两个可用合约；低流动性只输出 warning，不强行替换。
+- AKShare import 失败、接口不存在、接口异常或返回空表时，输出 `fetch_status=fail`、`records=[]`、`errors` 写明原因。
+- 真实 raw JSON 输出到 `data/raw/`，默认不提交 Git。
+
 ## v0.5 限制
 
-- 不接真实数据源。
+- 只接 AKShare SC 单源行情 fetcher v1。
+- 不接 Brent、WTI、汇率、EIA、FRED 或 yfinance。
 - 不修改正式数据字典。
 - 不修改数据库 schema。
 - 不写 `evidence_database`。

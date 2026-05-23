@@ -8,8 +8,10 @@ db/*.sqlite
 logs/*.log
 /sc-oil-agent/
 data/processed/*.json
+data/raw/*.json
 reports/daily/*.md
 reports/weekly/*.md
 !data/processed/.gitkeep
+!data/raw/.gitkeep
 !reports/daily/.gitkeep
 !reports/weekly/.gitkeep

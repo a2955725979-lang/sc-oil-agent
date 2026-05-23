@@ -167,8 +167,16 @@ python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD --report-id R
 
 pass / warning / fail 的完整验收命令见 `docs/validation.md`。`data/samples/validation/` 下的样例不是市场数据，不能用于研究、交易或行情判断。
 
-## Fetcher 契约
+## Fetcher 契约与 AKShare SC 行情
 
-v0.5 先定义真实数据源接入前的 fetcher 契约，不直接接 AKShare、EIA、FRED 或 yfinance。接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。
+v0.5 已定义 fetcher 契约，并新增 AKShare SC 单源行情 fetcher v1。接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。
 
 fetcher 样例同样不是市场数据，不能用于研究、交易或行情判断。
+
+AKShare SC 行情 fetcher 只输出 `raw_data_contract_v1`，暂不自动进入一键 pipeline：
+
+```bash
+python src/fetchers/akshare_sc.py --report-date YYYY-MM-DD --output data/raw/akshare_sc_YYYY-MM-DD.json
+```
+
+真实 raw JSON 默认写入 `data/raw/`，不会提交到 GitHub。自动测试使用本地 fixture，不联网，也不依赖真实 AKShare 可用性。
