@@ -38,6 +38,15 @@ def assert_not_contains(text: str, forbidden_fragment: str, message: str) -> Non
         raise AssertionError(f"{message}: {forbidden_fragment!r} found")
 
 
+def assert_in_order(text: str, fragments: list[str], message: str) -> None:
+    cursor = -1
+    for fragment in fragments:
+        next_cursor = text.find(fragment, cursor + 1)
+        if next_cursor == -1:
+            raise AssertionError(f"{message}: {fragment!r} not found after offset {cursor}")
+        cursor = next_cursor
+
+
 def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -83,6 +92,22 @@ def test_example_warning_report_contains_required_sections() -> None:
         markdown,
         "当前不依赖 Agent、LLM 或外部 skill",
         "generator should state it has no Agent/LLM/skill dependency",
+    )
+    assert_in_order(
+        markdown,
+        [
+            "## 1. 数据状态与结论约束",
+            "## 2. SC 主力行情",
+            "## 3. SC 期限结构与月差",
+            "## 4. Brent / WTI 外盘简化参考",
+            "## 5. USD/CNY 汇率影响",
+            "## 6. SC 简化价差",
+            "## 7. EIA 库存与海外供需摘要",
+            "## 8. 公告、新闻与人工备注",
+            "## 9. 证据链",
+            "## 10. 风险反例、下一交易日关注与人工审核区",
+        ],
+        "report should follow the fixed SC daily judgement order",
     )
 
     for term in FORBIDDEN_TERMS:
