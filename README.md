@@ -55,6 +55,22 @@ python src/validators/run_quality_validation.py --report-date YYYY-MM-DD
 data/processed/quality_report_YYYY-MM-DD.json
 ```
 
+## 每日计算字段
+
+价差/月差计算器只读取本地 `daily_input`，不联网、不入库、不修改原始手填文件。默认输出到：
+
+```text
+data/processed/calculated_input_YYYY-MM-DD.json
+```
+
+运行示例：
+
+```bash
+python src/calculators/spreads.py --input data/manual/daily_input_example.json --output data/processed/calculated_input_example.json
+```
+
+当前会生成或重算这些字段：`SC_USD`、`SC_calendar_spread`、`SC_Brent_spread_simple`、`SC_WTI_spread_simple`。processed 层默认覆盖已有计算字段，确保口径统一；如果只是想保留手填计算值，可以加 `--preserve-existing`。
+
 ## 非 Agent 日报生成
 
 日报生成器借鉴结构化 daily brief 思路，但当前不依赖 Agent 或外部 skill。它只读取本地 `daily_input` 和 `quality_report`，用固定模板生成 Markdown，不联网搜索，不调用 LLM，不自动生成交易观点，也不伪造正式 Evidence ID。

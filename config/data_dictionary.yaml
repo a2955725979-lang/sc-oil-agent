@@ -88,6 +88,15 @@ USD_CNY:
   update_time: after_close
   quality_checks: [missing_check, stale_check, range_check]
   fail_action: use_mid_price_with_warning
+SC_USD:
+  required: true
+  source_primary: Python calculation
+  source_backup: manual calculation
+  unit: USD/barrel
+  frequency: daily
+  update_time: after_close
+  quality_checks: [missing_check, spread_check, unit_check]
+  fail_action: skip_calculation
 SC_Brent_spread_simple:
   required: true
   source_primary: Python calculation

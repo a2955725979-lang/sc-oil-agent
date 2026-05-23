@@ -19,6 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 CALCULATED_INDICATOR_FIELDS = {
+    "SC_USD",
     "SC_calendar_spread",
     "SC_Brent_spread_simple",
     "SC_WTI_spread_simple",

@@ -77,6 +77,7 @@ def test_example_generates_typed_field_level_evidence() -> None:
     )
     assert_equal(fields["SC_close"]["source_status"], "pass", "pass field should be kept")
     assert_equal(fields["SC_close"]["evidence_type"], "validated_field", "ordinary field type")
+    assert_equal(fields["SC_USD"]["evidence_type"], "calculated_indicator", "SC USD type")
     assert_equal(fields["SC_calendar_spread"]["evidence_type"], "calculated_indicator", "spread type")
     assert_equal(
         fields["OPEC_monthly_summary"]["evidence_type"],

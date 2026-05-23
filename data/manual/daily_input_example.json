@@ -87,6 +87,21 @@
         "timezone": "Asia/Shanghai"
       }
     },
+    "SC_USD": {
+      "value": 86.4206,
+      "metadata": {
+        "unit": "USD/barrel",
+        "sc_date": "2026-05-22",
+        "external_date": "2026-05-22",
+        "fx_date": "2026-05-22",
+        "timezone": "Asia/Shanghai",
+        "calculation_method": "simple_fx_adjusted_v1",
+        "calculation_inputs": [
+          "SC_close",
+          "USD_CNY"
+        ]
+      }
+    },
     "SC_Brent_spread_simple": {
       "value": 4.02,
       "metadata": {

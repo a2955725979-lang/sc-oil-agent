@@ -1,4 +1,4 @@
-"""Calculate SC calendar spread and simplified external spreads.
+"""Calculate SC USD reference, calendar spread, and simplified external spreads.
 
 This module only uses local daily_input JSON data. It does not fetch market
 data, write databases, or modify the original input file.
@@ -21,6 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 CALCULATION_METHOD = "simple_fx_adjusted_v1"
 CALCULATED_FIELDS = {
+    "SC_USD",
     "SC_calendar_spread",
     "SC_Brent_spread_simple",
     "SC_WTI_spread_simple",
@@ -41,23 +42,23 @@ def load_daily_input(path: str | Path) -> dict[str, Any]:
 
 
 def build_default_output_path(report_date: str) -> Path:
-    return PROJECT_ROOT / "data" / "processed" / f"daily_input_with_spreads_{report_date}.json"
+    return PROJECT_ROOT / "data" / "processed" / f"calculated_input_{report_date}.json"
 
 
 def calculate_spreads_file(
     input_path: str | Path,
     output_path: str | Path | None = None,
-    overwrite: bool = False,
+    preserve_existing: bool = False,
 ) -> dict[str, Any]:
     daily_input = load_daily_input(input_path)
-    calculated = calculate_spreads(daily_input, overwrite=overwrite)
+    calculated = calculate_spreads(daily_input, preserve_existing=preserve_existing)
     report_date = str(calculated.get("report_date") or "UNKNOWN_DATE")
     final_output_path = Path(output_path) if output_path else build_default_output_path(report_date)
     write_daily_input(calculated, final_output_path)
     return calculated
 
 
-def calculate_spreads(daily_input: dict[str, Any], overwrite: bool = False) -> dict[str, Any]:
+def calculate_spreads(daily_input: dict[str, Any], preserve_existing: bool = False) -> dict[str, Any]:
     """Return a copy of daily_input with calculated spread fields added."""
 
     result = copy.deepcopy(daily_input)
@@ -76,20 +77,21 @@ def calculate_spreads(daily_input: dict[str, Any], overwrite: bool = False) -> d
         warnings = []
     context["calculation_warnings"] = warnings
 
-    _calculate_calendar_spread(fields, warnings, overwrite)
+    _calculate_sc_usd(fields, warnings, preserve_existing)
+    _calculate_calendar_spread(fields, warnings, preserve_existing)
     _calculate_external_spread(
         fields=fields,
         warnings=warnings,
         target_field="SC_Brent_spread_simple",
         external_field="Brent_close",
-        overwrite=overwrite,
+        preserve_existing=preserve_existing,
     )
     _calculate_external_spread(
         fields=fields,
         warnings=warnings,
         target_field="SC_WTI_spread_simple",
         external_field="WTI_close",
-        overwrite=overwrite,
+        preserve_existing=preserve_existing,
     )
     return result
 
@@ -106,7 +108,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Calculate SC spreads from local daily input JSON.")
     parser.add_argument("--input", required=True, help="Daily input JSON path.")
     parser.add_argument("--output", help="Processed daily input JSON output path.")
-    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing calculated spread fields.")
+    parser.add_argument(
+        "--preserve-existing",
+        action="store_true",
+        help="Keep existing calculated fields instead of recalculating them.",
+    )
     return parser.parse_args(argv)
 
 
@@ -116,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         calculated = calculate_spreads_file(
             input_path=args.input,
             output_path=args.output,
-            overwrite=args.overwrite,
+            preserve_existing=args.preserve_existing,
         )
     except (SpreadCalculationError, OSError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}")
@@ -129,9 +135,46 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _calculate_calendar_spread(fields: dict[str, Any], warnings: list[str], overwrite: bool) -> None:
+def _calculate_sc_usd(fields: dict[str, Any], warnings: list[str], preserve_existing: bool) -> None:
+    target = "SC_USD"
+    if _skip_existing(fields, target, warnings, preserve_existing):
+        return
+
+    sc_close = _field_number(fields, "SC_close", warnings)
+    usd_cny = _field_number(fields, "USD_CNY", warnings)
+    if sc_close is None or usd_cny is None:
+        warnings.append(f"{target}: skipped because SC_close or USD_CNY is missing/non-numeric")
+        return
+    if usd_cny == 0:
+        warnings.append(f"{target}: skipped because USD_CNY is zero")
+        return
+
+    if not _require_unit(fields, "SC_close", "CNY/barrel", warnings):
+        warnings.append(f"{target}: skipped because SC_close unit is not CNY/barrel")
+        return
+    if not _require_unit(fields, "USD_CNY", "CNY/USD", warnings):
+        warnings.append(f"{target}: skipped because USD_CNY unit is not CNY/USD")
+        return
+
+    sc_date = _field_date(fields, "SC_close")
+    fx_date = _field_date(fields, "USD_CNY")
+    fields[target] = {
+        "value": round(sc_close / usd_cny, 4),
+        "metadata": {
+            "unit": "USD/barrel",
+            "sc_date": sc_date,
+            "external_date": fx_date,
+            "fx_date": fx_date,
+            "timezone": _field_timezone(fields, "SC_close"),
+            "calculation_method": CALCULATION_METHOD,
+            "calculation_inputs": ["SC_close", "USD_CNY"],
+        },
+    }
+
+
+def _calculate_calendar_spread(fields: dict[str, Any], warnings: list[str], preserve_existing: bool) -> None:
     target = "SC_calendar_spread"
-    if _skip_existing(fields, target, warnings, overwrite):
+    if _skip_existing(fields, target, warnings, preserve_existing):
         return
 
     near_price = _field_number(fields, "SC_near_price", warnings)
@@ -171,42 +214,35 @@ def _calculate_external_spread(
     warnings: list[str],
     target_field: str,
     external_field: str,
-    overwrite: bool,
+    preserve_existing: bool,
 ) -> None:
-    if _skip_existing(fields, target_field, warnings, overwrite):
+    if _skip_existing(fields, target_field, warnings, preserve_existing):
         return
 
-    sc_close = _field_number(fields, "SC_close", warnings)
-    usd_cny = _field_number(fields, "USD_CNY", warnings)
+    sc_usd = _field_number(fields, "SC_USD", warnings)
     external_close = _field_number(fields, external_field, warnings)
-    if sc_close is None or usd_cny is None or external_close is None:
+    if sc_usd is None or external_close is None:
         warnings.append(f"{target_field}: skipped because required input is missing/non-numeric")
         return
-    if usd_cny == 0:
-        warnings.append(f"{target_field}: skipped because USD_CNY is zero")
-        return
 
-    if not _require_unit(fields, "SC_close", "CNY/barrel", warnings):
-        warnings.append(f"{target_field}: skipped because SC_close unit is not CNY/barrel")
-        return
-    if not _require_unit(fields, "USD_CNY", "CNY/USD", warnings):
-        warnings.append(f"{target_field}: skipped because USD_CNY unit is not CNY/USD")
+    if not _require_unit(fields, "SC_USD", "USD/barrel", warnings):
+        warnings.append(f"{target_field}: skipped because SC_USD unit is not USD/barrel")
         return
     if not _require_unit(fields, external_field, "USD/barrel", warnings):
         warnings.append(f"{target_field}: skipped because {external_field} unit is not USD/barrel")
         return
 
-    value = round(sc_close / usd_cny - external_close, 4)
+    value = round(sc_usd - external_close, 4)
     fields[target_field] = {
         "value": value,
         "metadata": {
             "unit": "USD/barrel",
-            "sc_date": _field_date(fields, "SC_close"),
+            "sc_date": _field_metadata(fields, "SC_USD").get("sc_date"),
             "external_date": _field_date(fields, external_field),
-            "fx_date": _field_date(fields, "USD_CNY"),
-            "timezone": _field_timezone(fields, "SC_close"),
+            "fx_date": _field_metadata(fields, "SC_USD").get("fx_date"),
+            "timezone": _field_timezone(fields, "SC_USD"),
             "calculation_method": CALCULATION_METHOD,
-            "calculation_inputs": ["SC_close", "USD_CNY", external_field],
+            "calculation_inputs": ["SC_USD", external_field],
         },
     }
 
@@ -215,11 +251,11 @@ def _skip_existing(
     fields: dict[str, Any],
     target_field: str,
     warnings: list[str],
-    overwrite: bool,
+    preserve_existing: bool,
 ) -> bool:
-    if overwrite or target_field not in fields:
+    if not preserve_existing or target_field not in fields:
         return False
-    warnings.append(f"{target_field}: skipped existing field; use --overwrite to recalculate")
+    warnings.append(f"{target_field}: preserved existing field because --preserve-existing was used")
     return True
 
 

@@ -15,7 +15,12 @@ from tempfile import TemporaryDirectory
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.calculators.spreads import calculate_spreads, calculate_spreads_file, main  # noqa: E402
+from src.calculators.spreads import (  # noqa: E402
+    build_default_output_path,
+    calculate_spreads,
+    calculate_spreads_file,
+    main,
+)
 
 
 def assert_equal(actual, expected, message: str) -> None:
@@ -85,21 +90,27 @@ def warnings_from(data: dict) -> list[str]:
     return warnings if isinstance(warnings, list) else []
 
 
-def test_calculates_calendar_and_external_spreads() -> None:
+def test_calculates_sc_usd_calendar_and_external_spreads() -> None:
     data = calculate_spreads(base_input())
     fields = data["fields"]
 
+    assert_equal(fields["SC_USD"]["value"], 86.4206, "SC USD reference")
     assert_equal(fields["SC_calendar_spread"]["value"], 3.8, "calendar spread")
     assert_equal(fields["SC_Brent_spread_simple"]["value"], 4.0206, "SC-Brent spread")
     assert_equal(fields["SC_WTI_spread_simple"]["value"], 7.8206, "SC-WTI spread")
     assert_equal(
-        fields["SC_Brent_spread_simple"]["metadata"]["calculation_method"],
+        fields["SC_USD"]["metadata"]["calculation_method"],
         "simple_fx_adjusted_v1",
         "calculation method",
     )
     assert_equal(
+        fields["SC_USD"]["metadata"]["calculation_inputs"],
+        ["SC_close", "USD_CNY"],
+        "SC USD calculation inputs",
+    )
+    assert_equal(
         fields["SC_Brent_spread_simple"]["metadata"]["calculation_inputs"],
-        ["SC_close", "USD_CNY", "Brent_close"],
+        ["SC_USD", "Brent_close"],
         "calculation inputs",
     )
     assert_equal(
@@ -109,23 +120,23 @@ def test_calculates_calendar_and_external_spreads() -> None:
     )
 
 
-def test_default_does_not_overwrite_existing_fields() -> None:
+def test_default_overwrites_existing_fields() -> None:
     data = calculate_spreads(base_input(include_existing_spreads=True))
+    fields = data["fields"]
+
+    assert_equal(fields["SC_calendar_spread"]["value"], 3.8, "calendar spread overwritten by default")
+    assert_equal(fields["SC_Brent_spread_simple"]["value"], 4.0206, "Brent spread overwritten by default")
+    assert_equal(fields["SC_WTI_spread_simple"]["value"], 7.8206, "WTI spread overwritten by default")
+
+
+def test_preserve_existing_keeps_existing_fields() -> None:
+    data = calculate_spreads(base_input(include_existing_spreads=True), preserve_existing=True)
     fields = data["fields"]
 
     assert_equal(fields["SC_calendar_spread"]["value"], 99.0, "existing calendar spread preserved")
     assert_equal(fields["SC_Brent_spread_simple"]["value"], 99.0, "existing Brent spread preserved")
     assert_equal(fields["SC_WTI_spread_simple"]["value"], 99.0, "existing WTI spread preserved")
-    assert_contains(warnings_from(data), "SC_calendar_spread: skipped existing field", "skip warning")
-
-
-def test_overwrite_recalculates_existing_fields() -> None:
-    data = calculate_spreads(base_input(include_existing_spreads=True), overwrite=True)
-    fields = data["fields"]
-
-    assert_equal(fields["SC_calendar_spread"]["value"], 3.8, "calendar spread overwritten")
-    assert_equal(fields["SC_Brent_spread_simple"]["value"], 4.0206, "Brent spread overwritten")
-    assert_equal(fields["SC_WTI_spread_simple"]["value"], 7.8206, "WTI spread overwritten")
+    assert_contains(warnings_from(data), "SC_calendar_spread: preserved existing field", "preserve warning")
 
 
 def test_missing_usd_cny_skips_external_spreads() -> None:
@@ -136,6 +147,7 @@ def test_missing_usd_cny_skips_external_spreads() -> None:
     fields = data["fields"]
 
     assert_equal("SC_calendar_spread" in fields, True, "calendar spread should still calculate")
+    assert_equal("SC_USD" in fields, False, "SC USD should skip")
     assert_equal("SC_Brent_spread_simple" in fields, False, "Brent spread should skip")
     assert_equal("SC_WTI_spread_simple" in fields, False, "WTI spread should skip")
     assert_contains(warnings_from(data), "USD_CNY: missing field", "missing USD warning")
@@ -148,16 +160,26 @@ def test_unit_mismatch_skips_calculation() -> None:
     data = calculate_spreads(source)
     fields = data["fields"]
 
+    assert_equal("SC_USD" in fields, False, "SC USD should skip on unit mismatch")
     assert_equal("SC_Brent_spread_simple" in fields, False, "Brent spread should skip on unit mismatch")
     assert_equal("SC_WTI_spread_simple" in fields, False, "WTI spread should skip on unit mismatch")
     assert_contains(warnings_from(data), "SC_close: unit mismatch", "unit warning")
+
+
+def test_default_output_path_uses_calculated_input_name() -> None:
+    output_path = build_default_output_path("2026-05-22")
+    assert_equal(
+        str(output_path).endswith("data/processed/calculated_input_2026-05-22.json"),
+        True,
+        "default output path",
+    )
 
 
 def test_output_directory_is_created_and_json_is_readable() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         input_path = root / "daily_input.json"
-        output_path = root / "nested" / "processed" / "daily_input_with_spreads.json"
+        output_path = root / "nested" / "processed" / "calculated_input.json"
         write_json(input_path, base_input())
 
         result = calculate_spreads_file(input_path, output_path=output_path)
@@ -171,7 +193,7 @@ def test_cli_runs_with_custom_paths() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         input_path = root / "daily_input.json"
-        output_path = root / "processed" / "daily_input_with_spreads.json"
+        output_path = root / "processed" / "calculated_input.json"
         write_json(input_path, base_input())
 
         exit_code = main(["--input", str(input_path), "--output", str(output_path)])
@@ -181,15 +203,31 @@ def test_cli_runs_with_custom_paths() -> None:
     assert_equal(saved["fields"]["SC_Brent_spread_simple"]["value"], 4.0206, "CLI Brent spread")
 
 
+def test_cli_preserve_existing_flag() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        input_path = root / "daily_input.json"
+        output_path = root / "processed" / "calculated_input.json"
+        write_json(input_path, base_input(include_existing_spreads=True))
+
+        exit_code = main(["--input", str(input_path), "--output", str(output_path), "--preserve-existing"])
+        saved = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert_equal(exit_code, 0, "CLI should return success")
+    assert_equal(saved["fields"]["SC_Brent_spread_simple"]["value"], 99.0, "CLI should preserve existing spread")
+
+
 def run() -> None:
     tests = [
-        test_calculates_calendar_and_external_spreads,
-        test_default_does_not_overwrite_existing_fields,
-        test_overwrite_recalculates_existing_fields,
+        test_calculates_sc_usd_calendar_and_external_spreads,
+        test_default_overwrites_existing_fields,
+        test_preserve_existing_keeps_existing_fields,
         test_missing_usd_cny_skips_external_spreads,
         test_unit_mismatch_skips_calculation,
+        test_default_output_path_uses_calculated_input_name,
         test_output_directory_is_created_and_json_is_readable,
         test_cli_runs_with_custom_paths,
+        test_cli_preserve_existing_flag,
     ]
     for test in tests:
         test()
