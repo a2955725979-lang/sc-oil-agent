@@ -7,3 +7,9 @@ db/*.sqlite
 !db/.gitkeep
 logs/*.log
 /sc-oil-agent/
+data/processed/*.json
+reports/daily/*.md
+reports/weekly/*.md
+!data/processed/.gitkeep
+!reports/daily/.gitkeep
+!reports/weekly/.gitkeep

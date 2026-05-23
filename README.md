@@ -5,6 +5,7 @@
 ## 目录
 
 - `docs/`：系统设计文档分册
+- `docs/validation.md`：本地 MVP 流水线 warning / fail 验证记录
 - `config/data_dictionary.yaml`：MVP 字段数据字典
 - `templates/`：日报、周报、事件点评模板
 - `prompts/`：Agent 系统提示词
@@ -160,3 +161,5 @@ python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD --report-id R
 1 = 程序或环境错误
 2 = 质检结果为 fail，已生成 quality report 和失败版 Markdown，不写 data_snapshot，不生成 evidence_list
 ```
+
+warning / fail 的完整验收命令见 `docs/validation.md`。
