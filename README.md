@@ -55,6 +55,26 @@ python src/validators/run_quality_validation.py --report-date YYYY-MM-DD
 data/processed/quality_report_YYYY-MM-DD.json
 ```
 
+## 非 Agent 日报生成
+
+日报生成器借鉴结构化 daily brief 思路，但当前不依赖 Agent 或外部 skill。它只读取本地 `daily_input` 和 `quality_report`，用固定模板生成 Markdown，不联网搜索，不调用 LLM，不自动生成交易观点，也不伪造正式 Evidence ID。
+
+先生成质量报告：
+
+```bash
+python src/validators/run_quality_validation.py --input data/manual/daily_input_example.json --output data/processed/quality_report_example.json
+```
+
+再生成示例日报：
+
+```bash
+python src/report_generator/generate_daily_report.py --daily-input data/manual/daily_input_example.json --quality-report data/processed/quality_report_example.json --output reports/daily/SC_daily_example.md --data-snapshot-id SNAP-EXAMPLE-001
+```
+
+`data/manual/daily_input_example.json` 仍然只是格式示例，不是真实市场数据，不能用于研究、交易或行情判断。
+
+当 `overall_status = warning` 时，日报会保留正常结构，但必须写出结论降级原因。当 `overall_status = fail` 时，日报只生成数据失败说明，不输出方向性结论。
+
 ## 一键日流程
 
 当数据库已经初始化后，可以用一条命令完成“质检 + 写入数据快照”：
