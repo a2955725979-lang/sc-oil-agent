@@ -4,7 +4,10 @@
 -- 2. MVP formal tables: market_prices, fx_rates, spread_table, inventory_data,
 --    oil_events, evidence_database, research_reports
 --
--- This file is intentionally rerunnable during early MVP development.
+-- WARNING:
+-- This schema contains DROP TABLE statements. It is intended for new database
+-- creation or explicit reset/rebuild flows only. Normal initialization must
+-- not execute this file against an existing database with valuable data.
 
 PRAGMA foreign_keys = ON;
 

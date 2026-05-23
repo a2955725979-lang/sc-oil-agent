@@ -34,7 +34,11 @@ def create_database(
     schema_path: Path = DEFAULT_SCHEMA_PATH,
     reset: bool = False,
 ) -> Path:
-    """Create or reset a SQLite database from schema.sql."""
+    """Safely create or explicitly reset a SQLite database.
+
+    Without reset, an existing database is checked but never rebuilt. This is
+    important because schema.sql contains DROP TABLE statements for reset use.
+    """
 
     db_path = db_path.expanduser().resolve()
     schema_path = schema_path.expanduser().resolve()
@@ -42,8 +46,12 @@ def create_database(
     if not schema_path.exists():
         raise FileNotFoundError(f"Schema file not found: {schema_path}")
 
+    if db_path.exists() and not reset:
+        check_database(db_path)
+        return db_path
+
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    if reset and db_path.exists():
+    if db_path.exists():
         db_path.unlink()
 
     schema_sql = schema_path.read_text(encoding="utf-8")
@@ -110,7 +118,7 @@ def check_database(db_path: Path = DEFAULT_DB_PATH) -> dict[str, object]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Create, reset, or check the SC oil research SQLite database."
+        description="Safely create, reset, or check the SC oil research SQLite database."
     )
     parser.add_argument(
         "--db",
@@ -127,12 +135,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="Delete the existing database file before recreating it.",
+        help="Destructive rebuild: delete the existing database file before recreating it.",
     )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Only check an existing database; do not create or reset it.",
+        help="Only check an existing database; do not create, reset, or rebuild it.",
     )
     return parser.parse_args()
 
@@ -149,7 +157,7 @@ def main() -> int:
 
         db_path = create_database(args.db, args.schema, reset=args.reset)
         result = check_database(db_path)
-        action = "Reset" if args.reset else "Created"
+        action = "Reset" if args.reset else "Ready"
         print(f"{action}: {result['db_path']}")
         print(f"Tables: {', '.join(result['tables'])}")
         return 0
