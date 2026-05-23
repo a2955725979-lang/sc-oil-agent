@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,13 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.database.write_research_report import (  # noqa: E402
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_DB_PATH,
+    ResearchReportWriteError,
+    write_research_report,
+)
 
 
 FORBIDDEN_TERMS = [
@@ -53,6 +61,11 @@ def generate_daily_report(
     output_path: str | Path | None = None,
     data_snapshot_id: str | None = None,
     evidence_list_path: str | Path | None = None,
+    write_db: bool = False,
+    db_path: str | Path = DEFAULT_DB_PATH,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
+    report_id: str | None = None,
+    replace: bool = False,
 ) -> str:
     daily_input = load_json(daily_input_path)
     quality_report = load_json(quality_report_path)
@@ -70,6 +83,17 @@ def generate_daily_report(
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(markdown, encoding="utf-8")
+    if write_db:
+        write_research_report(
+            markdown_path=output,
+            quality_report_path=quality_report_path,
+            db_path=db_path,
+            config_path=config_path,
+            evidence_list_path=evidence_list_path,
+            data_snapshot_id=data_snapshot_id,
+            report_id=report_id,
+            replace=replace,
+        )
     return markdown
 
 
@@ -225,6 +249,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", help="Markdown output path.")
     parser.add_argument("--data-snapshot-id", help="Optional data snapshot id.")
     parser.add_argument("--evidence-list", help="Optional field-level Evidence List JSON path.")
+    parser.add_argument("--write-db", action="store_true", help="Write generated Markdown to research_reports.")
+    parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="SQLite database path.")
+    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Project config YAML path.")
+    parser.add_argument("--report-id", help="Explicit report_id for research_reports.")
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="Allow INSERT OR REPLACE. Requires --report-id and --write-db.",
+    )
     return parser.parse_args(argv)
 
 
@@ -237,8 +270,19 @@ def main(argv: list[str] | None = None) -> int:
             output_path=args.output,
             data_snapshot_id=args.data_snapshot_id,
             evidence_list_path=args.evidence_list,
+            write_db=args.write_db,
+            db_path=args.db,
+            config_path=args.config,
+            report_id=args.report_id,
+            replace=args.replace,
         )
-    except (DailyReportGenerationError, OSError, json.JSONDecodeError) as exc:
+    except (
+        DailyReportGenerationError,
+        ResearchReportWriteError,
+        sqlite3.Error,
+        OSError,
+        json.JSONDecodeError,
+    ) as exc:
         print(f"ERROR: {exc}")
         return 1
     return 0

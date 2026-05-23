@@ -87,6 +87,14 @@ Evidence List v1 只是字段级证据，不是研究结论证据，不能直接
 
 Evidence ID v1 按输入 JSON 中字段出现顺序编号；同一输入顺序下编号稳定，但不承诺字段重排后仍保持同一编号。
 
+如需把生成后的 Markdown 日报写入 SQLite 的 `research_reports` 表，必须显式加 `--write-db`：
+
+```bash
+python src/report_generator/generate_daily_report.py --daily-input data/manual/daily_input_example.json --quality-report data/processed/quality_report_example.json --evidence-list data/processed/evidence_list_example.json --output reports/daily/SC_daily_example.md --write-db
+```
+
+自动 `report_id` 只新增不覆盖。显式 `--report-id` 默认也只新增；只有同时传 `--report-id` 和 `--replace` 时才会覆盖旧报告。
+
 `data/manual/daily_input_example.json` 仍然只是格式示例，不是真实市场数据，不能用于研究、交易或行情判断。
 
 当 `overall_status = warning` 时，日报会保留正常结构，但必须写出结论降级原因。当 `overall_status = fail` 时，日报只生成数据失败说明，不输出方向性结论。

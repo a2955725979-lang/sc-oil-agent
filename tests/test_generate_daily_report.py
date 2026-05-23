@@ -7,6 +7,7 @@ Run from the project root:
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -20,6 +21,7 @@ from src.report_generator.generate_daily_report import (  # noqa: E402
     generate_daily_report,
     main,
 )
+from src.database.init_db import create_database  # noqa: E402
 from src.evidence.generate_evidence_list import generate_evidence_list  # noqa: E402
 from src.validators.run_quality_validation import run_validation  # noqa: E402
 
@@ -51,6 +53,19 @@ def assert_in_order(text: str, fragments: list[str], message: str) -> None:
 def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def count_research_reports(db_path: Path) -> int:
+    with sqlite3.connect(db_path) as conn:
+        return conn.execute("SELECT COUNT(*) FROM research_reports;").fetchone()[0]
+
+
+def fetch_research_report_ids(db_path: Path) -> list[str]:
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT report_id FROM research_reports ORDER BY report_id;"
+        ).fetchall()
+    return [row[0] for row in rows]
 
 
 def test_example_warning_report_contains_required_sections() -> None:
@@ -267,6 +282,132 @@ def test_report_can_reference_field_level_evidence_list() -> None:
     assert_not_contains(markdown, "强依据", "warning evidence should not be described as strong evidence")
 
 
+def test_generate_report_does_not_write_db_by_default() -> None:
+    input_path = PROJECT_ROOT / "data" / "manual" / "daily_input_example.json"
+    dictionary_path = PROJECT_ROOT / "config" / "data_dictionary.yaml"
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        db_path = root / "test.sqlite"
+        quality_report_path = root / "quality_report_example.json"
+        output_path = root / "SC_daily_example.md"
+
+        create_database(db_path)
+        run_validation(
+            input_path=input_path,
+            data_dictionary_path=dictionary_path,
+            output_path=quality_report_path,
+        )
+        generate_daily_report(
+            daily_input_path=input_path,
+            quality_report_path=quality_report_path,
+            output_path=output_path,
+        )
+
+        report_count = count_research_reports(db_path)
+
+    assert_equal(report_count, 0, "default report generation should not write research_reports")
+
+
+def test_generate_report_writes_db_when_requested() -> None:
+    input_path = PROJECT_ROOT / "data" / "manual" / "daily_input_example.json"
+    dictionary_path = PROJECT_ROOT / "config" / "data_dictionary.yaml"
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        db_path = root / "test.sqlite"
+        quality_report_path = root / "quality_report_example.json"
+        output_path = root / "SC_daily_example.md"
+
+        create_database(db_path)
+        run_validation(
+            input_path=input_path,
+            data_dictionary_path=dictionary_path,
+            output_path=quality_report_path,
+        )
+        generate_daily_report(
+            daily_input_path=input_path,
+            quality_report_path=quality_report_path,
+            output_path=output_path,
+            write_db=True,
+            db_path=db_path,
+        )
+        ids = fetch_research_report_ids(db_path)
+
+    assert_equal(ids, ["RPT-20260522-SC-DAILY-001"], "--write-db should insert one report")
+
+
+def test_cli_report_id_requires_replace_to_overwrite() -> None:
+    input_path = PROJECT_ROOT / "data" / "manual" / "daily_input_example.json"
+    dictionary_path = PROJECT_ROOT / "config" / "data_dictionary.yaml"
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        db_path = root / "test.sqlite"
+        quality_report_path = root / "quality_report_example.json"
+        output_path = root / "SC_daily_example.md"
+
+        create_database(db_path)
+        run_validation(
+            input_path=input_path,
+            data_dictionary_path=dictionary_path,
+            output_path=quality_report_path,
+        )
+
+        first_exit = main(
+            [
+                "--daily-input",
+                str(input_path),
+                "--quality-report",
+                str(quality_report_path),
+                "--output",
+                str(output_path),
+                "--write-db",
+                "--db",
+                str(db_path),
+                "--report-id",
+                "RPT-CUSTOM-DAILY",
+            ]
+        )
+        duplicate_exit = main(
+            [
+                "--daily-input",
+                str(input_path),
+                "--quality-report",
+                str(quality_report_path),
+                "--output",
+                str(output_path),
+                "--write-db",
+                "--db",
+                str(db_path),
+                "--report-id",
+                "RPT-CUSTOM-DAILY",
+            ]
+        )
+        replace_exit = main(
+            [
+                "--daily-input",
+                str(input_path),
+                "--quality-report",
+                str(quality_report_path),
+                "--output",
+                str(output_path),
+                "--write-db",
+                "--db",
+                str(db_path),
+                "--report-id",
+                "RPT-CUSTOM-DAILY",
+                "--replace",
+            ]
+        )
+        ids = fetch_research_report_ids(db_path)
+
+    assert_equal(first_exit, 0, "first explicit report id should insert")
+    assert_equal(duplicate_exit, 1, "duplicate explicit report id should fail without replace")
+    assert_equal(replace_exit, 0, "replace should allow overwrite")
+    assert_equal(ids, ["RPT-CUSTOM-DAILY"], "replace should keep one row")
+
+
 def test_cli_generates_report_with_custom_paths() -> None:
     input_path = PROJECT_ROOT / "data" / "manual" / "daily_input_example.json"
     dictionary_path = PROJECT_ROOT / "config" / "data_dictionary.yaml"
@@ -307,6 +448,9 @@ def run() -> None:
         test_quality_report_snapshot_id_is_used_when_cli_id_is_missing,
         test_cli_snapshot_id_overrides_quality_report_snapshot_id,
         test_report_can_reference_field_level_evidence_list,
+        test_generate_report_does_not_write_db_by_default,
+        test_generate_report_writes_db_when_requested,
+        test_cli_report_id_requires_replace_to_overwrite,
         test_cli_generates_report_with_custom_paths,
     ]
     for test in tests:
