@@ -1,0 +1,24 @@
+{
+  "report_date": "2026-05-22",
+  "context": {
+    "required_for_topic": [],
+    "sample_notice": "Validation sample only. Not real market data."
+  },
+  "fields": {
+    "SC_close": {
+      "value": 620.5,
+      "metadata": {
+        "unit": "CNY/barrel",
+        "date": "2026-05-22",
+        "timezone": "Asia/Shanghai"
+      }
+    },
+    "important_oil_news": {
+      "value": "Validation sample news item with intentionally missing timezone metadata.",
+      "metadata": {
+        "unit": "text",
+        "date": "2026-05-22"
+      }
+    }
+  }
+}

@@ -5,17 +5,72 @@
 ## 当前验收状态
 
 ```text
-v0.4 本地完整日报流水线已通过核心验证
+v0.5 Step 1 已补齐稳定的 pass / warning / fail 样例验证体系
 ```
 
 已验证：
 
+- `pass` 样例：使用 test-only dictionary，覆盖本地计算链字段，稳定得到 `overall_status=pass`。
 - `warning` 场景：完整生成 `calculated_input`、`quality_report`、`data_snapshot`、`evidence_list`、Markdown 日报，并写入 `research_reports`。
 - `fail` 场景：生成 `calculated_input`、`quality_report`、失败版 Markdown，并写入 `research_reports`；不写 `data_snapshot`，不生成 `evidence_list`。
 
-暂未强制验证：
+保留说明：
 
-- `pass` 场景：当前正式数据字典包含 `source_conflict_check` / `revision_check` placeholder，示例文件会自然得到 `warning`。如需测试 `pass`，使用 test-only dictionary。
+- 正式 `data/manual/daily_input_example.json` 仍预期为 `warning`，因为它包含 placeholder warning 和额外字段演示。
+- 当前 pass 验证使用 `data/samples/validation/` 下的 test-only 样例，不代表真实市场数据。
+
+## 固定样例验证
+
+`data/samples/validation/` 下的样例只用于测试，不是真实市场数据，不能用于研究、交易或行情判断。
+
+pass 样例：
+
+```bash
+python src/validators/run_quality_validation.py \
+  --input data/samples/validation/pass_input.json \
+  --dictionary data/samples/validation/pass_dictionary.yaml \
+  --output /tmp/quality_pass.json
+```
+
+预期：
+
+```text
+overall_status: pass
+warnings: 0
+errors: 0
+```
+
+warning 样例：
+
+```bash
+python src/validators/run_quality_validation.py \
+  --input data/samples/validation/warning_input.json \
+  --dictionary data/samples/validation/warning_dictionary.yaml \
+  --output /tmp/quality_warning.json
+```
+
+预期：
+
+```text
+overall_status: warning
+errors: 0
+```
+
+fail 样例：
+
+```bash
+python src/validators/run_quality_validation.py \
+  --input data/samples/validation/fail_input.json \
+  --dictionary data/samples/validation/fail_dictionary.yaml \
+  --output /tmp/quality_fail.json
+```
+
+预期：
+
+```text
+overall_status: fail
+errors > 0
+```
 
 ## Warning 验证
 
@@ -115,6 +170,6 @@ macOS 上 `/tmp` 可能显示为 `/private/tmp`，这是正常路径映射。
 
 ## Pass 验证说明
 
-当前正式数据字典中，部分质量检查仍是 placeholder，因此正式 example 不追求 `pass`。如需测试 `pass`，使用只包含少量本地可验证字段的 test-only dictionary，例如只检查 `SC_close` 的 `missing_check` 和 `unit_check`。
+当前正式数据字典中，部分质量检查仍是 placeholder，因此正式 example 不追求 `pass`。`data/samples/validation/pass_dictionary.yaml` 不包含 `source_conflict_check` 或 `revision_check`，用于稳定验证本地可控字段。
 
 后续当 `source_conflict_check` 和 `revision_check` 接入真实多来源/版本数据后，再把正式 `pass` 场景纳入验收。

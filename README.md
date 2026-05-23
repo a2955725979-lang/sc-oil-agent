@@ -7,6 +7,7 @@
 - `docs/`：系统设计文档分册
 - `docs/validation.md`：本地 MVP 流水线 warning / fail 验证记录
 - `config/data_dictionary.yaml`：MVP 字段数据字典
+- `data/samples/validation/`：test-only 的 pass / warning / fail 验证样例
 - `templates/`：日报、周报、事件点评模板
 - `prompts/`：Agent 系统提示词
 - `src/`：后续 Python 模块目录
@@ -162,4 +163,4 @@ python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD --report-id R
 2 = 质检结果为 fail，已生成 quality report 和失败版 Markdown，不写 data_snapshot，不生成 evidence_list
 ```
 
-warning / fail 的完整验收命令见 `docs/validation.md`。
+pass / warning / fail 的完整验收命令见 `docs/validation.md`。`data/samples/validation/` 下的样例不是市场数据，不能用于研究、交易或行情判断。

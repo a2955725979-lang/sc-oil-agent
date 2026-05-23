@@ -1,0 +1,12 @@
+SC_close:
+  required: true
+  unit: CNY/barrel
+  frequency: daily
+  quality_checks: [missing_check, unit_check]
+  fail_action: report_as_missing
+important_oil_news:
+  required: false
+  unit: text
+  frequency: daily
+  quality_checks: [timezone_check]
+  fail_action: lower_confidence

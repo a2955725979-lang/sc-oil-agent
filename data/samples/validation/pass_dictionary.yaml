@@ -1,0 +1,60 @@
+SC_close:
+  required: true
+  unit: CNY/barrel
+  frequency: daily
+  quality_checks: [missing_check, range_check, unit_check]
+  fail_action: report_as_missing
+SC_near_price:
+  required: true
+  unit: CNY/barrel
+  frequency: daily
+  quality_checks: [missing_check, range_check, unit_check]
+  fail_action: report_as_missing
+SC_next_price:
+  required: true
+  unit: CNY/barrel
+  frequency: daily
+  quality_checks: [missing_check, range_check, unit_check]
+  fail_action: report_as_missing
+USD_CNY:
+  required: true
+  unit: CNY/USD
+  frequency: daily
+  quality_checks: [missing_check, range_check, unit_check]
+  fail_action: report_as_missing
+Brent_close:
+  required: true
+  unit: USD/barrel
+  frequency: daily
+  quality_checks: [missing_check, range_check, unit_check]
+  fail_action: report_as_missing
+WTI_close:
+  required: true
+  unit: USD/barrel
+  frequency: daily
+  quality_checks: [missing_check, range_check, unit_check]
+  fail_action: report_as_missing
+SC_USD:
+  required: true
+  unit: USD/barrel
+  frequency: daily
+  quality_checks: [missing_check, spread_check, unit_check]
+  fail_action: report_as_missing
+SC_calendar_spread:
+  required: true
+  unit: CNY/barrel
+  frequency: daily
+  quality_checks: [missing_check, spread_check, unit_check]
+  fail_action: report_as_missing
+SC_Brent_spread_simple:
+  required: true
+  unit: USD/barrel
+  frequency: daily
+  quality_checks: [missing_check, spread_check, unit_check]
+  fail_action: report_as_missing
+SC_WTI_spread_simple:
+  required: true
+  unit: USD/barrel
+  frequency: daily
+  quality_checks: [missing_check, spread_check, unit_check]
+  fail_action: report_as_missing

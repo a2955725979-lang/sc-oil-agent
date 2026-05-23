@@ -1,0 +1,6 @@
+SC_close:
+  required: true
+  unit: CNY/barrel
+  frequency: daily
+  quality_checks: [missing_check, unit_check]
+  fail_action: report_as_missing
