@@ -54,3 +54,27 @@ python src/validators/run_quality_validation.py --report-date YYYY-MM-DD
 ```text
 data/processed/quality_report_YYYY-MM-DD.json
 ```
+
+## 一键日流程
+
+当数据库已经初始化后，可以用一条命令完成“质检 + 写入数据快照”：
+
+```bash
+python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD
+```
+
+第一次运行或数据库不存在时，使用安全初始化参数：
+
+```bash
+python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD --init-db
+```
+
+`--init-db` 只会在数据库不存在时创建数据库；如果数据库已存在，只做结构检查。它不会删除、清空或重建历史快照。
+
+返回码含义：
+
+```text
+0 = 流程成功，质检结果为 pass 或 warning
+1 = 程序或环境错误
+2 = 质检结果为 fail，已生成 quality report，但不写入 data_snapshot
+```
