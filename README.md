@@ -117,7 +117,17 @@ python src/report_generator/generate_daily_report.py --daily-input data/manual/d
 
 ## 一键日流程
 
-当数据库已经初始化后，可以用一条命令完成“质检 + 写入数据快照”：
+当数据库已经初始化后，可以用一条命令完成本地 MVP 日流程：
+
+```text
+daily_input
+→ calculated_input
+→ quality_report
+→ data_snapshot
+→ evidence_list
+→ SC_daily Markdown
+→ research_reports
+```
 
 ```bash
 python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD
@@ -131,10 +141,22 @@ python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD --init-db
 
 `--init-db` 只会在数据库不存在时创建数据库；如果数据库已存在，只做结构检查。它不会删除、清空或重建历史快照。
 
+pipeline 会先把原始输入计算成 `data/processed/calculated_input_YYYY-MM-DD.json`，后续质检、Evidence List 和日报都使用这份 calculated input。默认会重新计算并覆盖 processed 层计算字段；如果需要保留输入里已有的计算字段，可以加：
+
+```bash
+python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD --preserve-existing-calculations
+```
+
+重复运行会自动新增 `research_reports` 记录，便于复盘不同版本的日报。开发调试时，如果想覆盖同一个报告记录，可以显式使用：
+
+```bash
+python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD --report-id RPT-YYYYMMDD-SC-DAILY-DEV --replace
+```
+
 返回码含义：
 
 ```text
 0 = 流程成功，质检结果为 pass 或 warning
 1 = 程序或环境错误
-2 = 质检结果为 fail，已生成 quality report，但不写入 data_snapshot
+2 = 质检结果为 fail，已生成 quality report 和失败版 Markdown，不写 data_snapshot，不生成 evidence_list
 ```
