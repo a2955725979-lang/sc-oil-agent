@@ -388,6 +388,8 @@ def _clean_date(value: Any) -> str | None:
     text = str(value).strip()
     if not text:
         return None
+    if re.fullmatch(r"\d{8}", text):
+        return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
     return text[:10]
 
 

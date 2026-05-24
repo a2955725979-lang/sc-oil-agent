@@ -128,6 +128,19 @@ def test_settlement_maps_from_settle_source_field() -> None:
     assert_equal(settlement_record["metadata"]["source_field"], "settle", "settlement source field")
 
 
+def test_akshare_compact_date_is_normalized() -> None:
+    rows = load_rows()
+    for row in rows:
+        row["date"] = "20260115"
+
+    raw_data = build_fetch_result_from_rows(rows, "2026-01-15", "2026-01-15T16:00:00+08:00")
+    close_record = find_record(raw_data, "SC_close")
+
+    assert_equal(close_record["metadata"]["date"], "2026-01-15", "compact AKShare date should normalize")
+    if any("row date" in warning for warning in raw_data["warnings"]):
+        raise AssertionError(f"compact AKShare date should not warn: {raw_data['warnings']!r}")
+
+
 def test_main_contract_uses_max_volume_and_warns_on_open_interest_mismatch() -> None:
     raw_data = build_fetch_result_from_rows(load_rows(), "2026-01-15", "2026-01-15T16:00:00+08:00")
     volume_record = find_record(raw_data, "SC_volume")
@@ -207,6 +220,7 @@ def run() -> None:
         test_fixture_builds_raw_data_contract_v1,
         test_lowercase_symbol_is_normalized_and_raw_symbol_preserved,
         test_settlement_maps_from_settle_source_field,
+        test_akshare_compact_date_is_normalized,
         test_main_contract_uses_max_volume_and_warns_on_open_interest_mismatch,
         test_near_next_select_recent_active_contracts_by_month,
         test_empty_rows_return_structured_fail,
