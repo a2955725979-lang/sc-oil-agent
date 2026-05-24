@@ -105,6 +105,19 @@ test / manual / official / third_party / derived
 - 同一个 raw_data 内重复字段会产生 `conversion_warnings`，并保留第一条。
 - 缺少 `records` 或 record 缺少 `field/value` 会进入 `conversion_errors`。
 
+CLI 示例：
+
+```bash
+python src/fetchers/transform.py --input data/raw/akshare_sc_2026-01-15.json --output data/manual/daily_input_2026-01-15.json
+```
+
+默认输出：
+
+- `data/manual/daily_input_YYYY-MM-DD.json`
+- `data/processed/conversion_result_YYYY-MM-DD.json`
+
+转换工具始终写出 conversion result。只有 `usable_for_pipeline=true` 时才写出可继续进入质检链的 daily input；如果 raw_data 为 `fetch_status=fail` 或转换存在错误，则返回码为 `2`，不写 daily input。
+
 ## AKShare SC 行情 Fetcher v1
 
 第一个真实行情 fetcher 使用 AKShare 的交易所日行情接口：
