@@ -13,7 +13,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.fetchers.base import FETCH_STATUSES, RAW_DATA_CONTRACT_VERSION, is_valid_source_level
+from src.fetchers.base import (
+    DAILY_INPUT_SCHEMA_VERSION,
+    is_valid_source_level,
+    validate_raw_data_contract,
+)
 
 
 DEFAULT_DAILY_INPUT_DIR = PROJECT_ROOT / "data" / "manual"
@@ -30,6 +34,7 @@ def convert_raw_data_to_daily_input(raw_data: dict[str, Any]) -> dict[str, Any]:
     warnings: list[str] = []
     errors: list[str] = []
     daily_input = {
+        "schema_version": DAILY_INPUT_SCHEMA_VERSION,
         "report_date": str(raw_data.get("report_date", "")),
         "context": {
             "raw_data_contract_version": raw_data.get("contract_version"),
@@ -204,34 +209,7 @@ def print_summary(conversion: dict[str, Any]) -> None:
 
 
 def _validate_top_level(raw_data: dict[str, Any], errors: list[str]) -> None:
-    if raw_data.get("contract_version") != RAW_DATA_CONTRACT_VERSION:
-        errors.append(f"contract_version must be {RAW_DATA_CONTRACT_VERSION}")
-
-    fetch_status = raw_data.get("fetch_status")
-    if fetch_status not in FETCH_STATUSES:
-        errors.append("fetch_status must be one of pass/warning/fail")
-
-    for required_name in (
-        "report_date",
-        "source_name",
-        "fetcher_name",
-        "fetcher_version",
-        "fetched_at",
-    ):
-        if not raw_data.get(required_name):
-            errors.append(f"{required_name} is required")
-
-    records = raw_data.get("records")
-    if not isinstance(records, list):
-        errors.append("records must be a list")
-
-    warnings = raw_data.get("warnings")
-    if warnings is not None and not isinstance(warnings, list):
-        errors.append("warnings must be a list")
-
-    raw_errors = raw_data.get("errors")
-    if raw_errors is not None and not isinstance(raw_errors, list):
-        errors.append("errors must be a list")
+    errors.extend(validate_raw_data_contract(raw_data))
 
 
 if __name__ == "__main__":

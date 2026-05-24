@@ -5,6 +5,7 @@
 ## 目录
 
 - `docs/`：系统设计文档分册
+- `docs/contracts.md`：v0.5 冻结后的 raw_data / daily_input 契约
 - `docs/fetcher_design.md`：v0.5 fetcher 接口与 raw_data 转换契约
 - `docs/validation.md`：本地 MVP 流水线 warning / fail 验证记录
 - `config/data_dictionary.yaml`：MVP 字段数据字典
@@ -29,7 +30,7 @@
 
 `data/manual/daily_input_example.json` 只是格式示例，不是真实市场数据，不能用于研究、交易或行情判断。
 
-示例文件用于演示每日输入 JSON 的结构，以及质检器如何输出 `pass / warning / fail`。其中：
+示例文件用于演示每日输入 JSON 的结构，以及质检器如何输出 `pass / warning / fail`。v0.5 新生成的 daily input 使用 `daily_input_schema_v1`；旧 daily input 缺少 `schema_version` 暂时仍可读取。其中：
 
 - `Oman_price_experimental` 用于演示“未在数据字典中定义的额外字段 warning”，不会进入正式字段质检。
 - `OPEC_monthly_summary` 和 `IEA_monthly_summary` 的 warning 来自当前 v1 的 `source_conflict_check` 占位逻辑，不是 `revision_check`。
@@ -169,17 +170,17 @@ pass / warning / fail 的完整验收命令见 `docs/validation.md`。`data/samp
 
 ## Fetcher 契约与 AKShare SC 行情
 
-v0.5 已定义 fetcher 契约，并新增 AKShare SC 单源行情 fetcher v1。接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。
+v0.5 已冻结 `raw_data_contract_v1` 和 `daily_input_schema_v1`，并新增 AKShare SC 单源行情 fetcher v1。契约边界见 `docs/contracts.md`，接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。
 
 fetcher 样例同样不是市场数据，不能用于研究、交易或行情判断。
 
-AKShare SC 行情 fetcher 只输出 `raw_data_contract_v1`，暂不自动进入一键 pipeline：
+AKShare SC 行情 fetcher 只输出冻结后的 `raw_data_contract_v1`，暂不自动进入一键 pipeline：
 
 ```bash
 python src/fetchers/akshare_sc.py --report-date YYYY-MM-DD --output data/raw/akshare_sc_YYYY-MM-DD.json
 ```
 
-将 raw_data 转成验证链可读取的 daily input：
+将 raw_data 转成验证链可读取的 `daily_input_schema_v1`：
 
 ```bash
 python src/fetchers/transform.py --input data/raw/akshare_sc_YYYY-MM-DD.json --output data/manual/daily_input_YYYY-MM-DD.json

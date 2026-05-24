@@ -1,6 +1,6 @@
 # Fetcher Design
 
-本文件定义 v0.5 的 fetcher 接口设计。当前阶段先完成契约层，并提供 AKShare SC 单源行情 fetcher v1；其他真实数据源暂不接入。
+本文件定义 v0.5 的 fetcher 接口设计。当前阶段已冻结 `raw_data_contract_v1` 和 `daily_input_schema_v1`，并提供 AKShare SC 单源行情 fetcher v1；其他真实数据源暂不接入。冻结后的契约边界见 `docs/contracts.md`。
 
 ## 职责边界
 
@@ -32,6 +32,8 @@ fetcher
 ```
 
 ## raw_data_contract_v1
+
+v0.5 已冻结该契约。顶层 key 固定，不开放扩展字段；扩展信息只能放在 `records[].metadata` 或 `records[].raw_payload`。
 
 顶层结构：
 
@@ -98,12 +100,16 @@ test / manual / official / third_party / derived
 
 转换规则：
 
+- 新生成的 `daily_input` 必须带 `schema_version: daily_input_schema_v1`。
 - `records[].field` 映射到 `daily_input.fields.<field>`。
 - `records[].value` 原样进入字段值。
 - `records[].metadata` 原样保留，并补充 `source_name`、`fetcher_name`、`fetched_at`。
+- `daily_input.context` 是顶层扩展口，继续保留 `raw_data_contract_version`、`source_name`、`fetcher_name`、`fetcher_version`、`fetched_at`、`fetch_status`。
+- `daily_input.fields.<field>` 固定为 `{ "value": ..., "metadata": {...} }`。
 - `fetch_status=fail` 时，`usable_for_pipeline=false`。
 - 同一个 raw_data 内重复字段会产生 `conversion_warnings`，并保留第一条。
 - 缺少 `records` 或 record 缺少 `field/value` 会进入 `conversion_errors`。
+- 旧 daily input 缺少 `schema_version` 暂时兼容到 v0.6 前；新生成文件和新样例必须带版本号。
 
 CLI 示例：
 
