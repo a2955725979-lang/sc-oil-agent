@@ -124,6 +124,27 @@ python src/fetchers/transform.py --input data/raw/akshare_sc_2026-01-15.json --o
 
 转换工具始终写出 conversion result。只有 `usable_for_pipeline=true` 时才写出可继续进入质检链的 daily input；如果 raw_data 为 `fetch_status=fail` 或转换存在错误，则返回码为 `2`，不写 daily input。
 
+## daily_input 合并
+
+AKShare SC 行情 fetcher 只能提供 SC 行情字段，不能替代完整日报输入。v0.5 使用独立合并工具把 fetcher 自动字段与人工补充字段合并：
+
+```bash
+python src/fetchers/merge_daily_input.py \
+  --base data/manual/manual_supplement_2026-01-15.json \
+  --overlay data/manual/akshare_daily_input_2026-01-15.json \
+  --output data/manual/daily_input_2026-01-15.json
+```
+
+合并器只负责 daily input 合并，不负责取数、计算、质检、入库，也不自动接入 `run_daily_pipeline.py`。
+
+规则：
+
+- `base` 是人工补充字段，`overlay` 是 fetcher 自动字段。
+- `report_date` 必须一致。
+- 输出强制写 `schema_version: daily_input_schema_v1`。
+- 同名字段默认 overlay 覆盖 base，并在字段 metadata 中保留 `manual_value_before_merge` 和 `manual_source_before_merge: base`。
+- base context 永远优先；overlay context 只补 source / fetcher 类字段，冲突只写 `context.merge_warnings`，不覆盖人工上下文。
+
 ## AKShare SC 行情 Fetcher v1
 
 第一个真实行情 fetcher 使用 AKShare 的交易所日行情接口：
