@@ -6,6 +6,7 @@
 
 - `docs/`：系统设计文档分册
 - `docs/contracts.md`：v0.5 冻结后的 raw_data / daily_input 契约
+- `docs/auto_daily_policy.md`：v0.6 Auto Daily Preflight 的失败降级和默认字段策略
 - `docs/fetcher_design.md`：v0.5 fetcher 接口与 raw_data 转换契约
 - `docs/validation.md`：本地 MVP 流水线 warning / fail 验证记录
 - `config/data_dictionary.yaml`：MVP 字段数据字典
@@ -197,6 +198,51 @@ python src/workflows/run_semiauto_daily.py \
   --raw-input data/raw/akshare_sc_YYYY-MM-DD.json \
   --init-db
 ```
+
+## Auto Daily Preflight
+
+v0.6 Auto Daily Preflight 的目标是：没有 `manual_supplement` 时，也能自动组装最小可运行 `daily_input_schema_v1`，并跑完既有本地日报 pipeline。当前阶段仍不接 Agent / LLM，不做联网搜索解释，不生成交易建议。
+
+自动链路：
+
+```text
+akshare_sc.py
+→ raw_data
+→ transform.py
+→ akshare_daily_input
+
+market_fx.py
+→ raw_data
+→ transform.py
+→ market_fx_daily_input
+
+default_fields.py
+→ default_fields daily_input
+
+merge_daily_input.py
+→ daily_input
+→ run_daily_pipeline.py
+```
+
+真实 provider 可用时的运行方式：
+
+```bash
+python src/pipeline/run_auto_daily.py --report-date YYYY-MM-DD --init-db
+```
+
+如果已经有本地 fixture 或 smoke test raw_data，可以跳过实时 fetch：
+
+```bash
+python src/pipeline/run_auto_daily.py \
+  --report-date YYYY-MM-DD \
+  --raw-input data/raw/akshare_sc_YYYY-MM-DD.json \
+  --market-fx-raw-input data/raw/market_fx_YYYY-MM-DD.json \
+  --init-db
+```
+
+`market_fx.py` 第一版自动字段是 `USD_CNY`、`Brent_close`、`WTI_close`，输出仍然是 `raw_data_contract_v1`。默认文本字段包括 `exchange_notice`、`important_oil_news`、`manual_notes`、`OPEC_monthly_summary`、`IEA_monthly_summary`，全部标记为 warning / low confidence，不得用于强结论或交易判断。
+
+当前 Auto Daily Preflight 的验收目标是“无人工 daily_input 也能跑出 warning 日报”，不是自动生成完整研究判断。失败降级规则见 `docs/auto_daily_policy.md`。
 
 ## Fetcher 契约与 AKShare SC 行情
 
