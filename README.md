@@ -168,6 +168,36 @@ python src/pipeline/run_daily_pipeline.py --report-date YYYY-MM-DD --report-id R
 
 pass / warning / fail 的完整验收命令见 `docs/validation.md`。`data/samples/validation/` 下的样例不是市场数据，不能用于研究、交易或行情判断。
 
+## Semi-auto daily workflow
+
+v0.6 半自动日流程把 AKShare SC 行情、人工补充文件和既有本地 pipeline 串起来。AKShare 只供应 SC 市场字段；`manual_supplement` 继续供应 Brent、WTI、USD_CNY、EIA、OPEC/IEA、news 和 manual notes。最终日报仍然走既有 `run_daily_pipeline.py`，包括计算字段、质检、`data_snapshot`、Evidence List、Markdown 日报和 `research_reports` 写入。
+
+```bash
+python src/workflows/run_semiauto_daily.py \
+  --report-date YYYY-MM-DD \
+  --manual-supplement data/manual/manual_supplement_YYYY-MM-DD.json \
+  --init-db
+```
+
+默认输出：
+
+```text
+data/raw/akshare_sc_YYYY-MM-DD.json
+data/processed/akshare_daily_input_YYYY-MM-DD.json
+data/processed/conversion_result_YYYY-MM-DD.json
+data/manual/daily_input_YYYY-MM-DD.json
+```
+
+如果已经有本地 raw_data 文件，可以用 `--raw-input` 跳过 AKShare 实时调用：
+
+```bash
+python src/workflows/run_semiauto_daily.py \
+  --report-date YYYY-MM-DD \
+  --manual-supplement data/manual/manual_supplement_YYYY-MM-DD.json \
+  --raw-input data/raw/akshare_sc_YYYY-MM-DD.json \
+  --init-db
+```
+
 ## Fetcher 契约与 AKShare SC 行情
 
 v0.5 已冻结 `raw_data_contract_v1` 和 `daily_input_schema_v1`，并新增 AKShare SC 单源行情 fetcher v1。契约边界见 `docs/contracts.md`，接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。
