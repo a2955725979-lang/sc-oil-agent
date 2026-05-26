@@ -23,10 +23,11 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.fetchers.base import FetchResult, RawDataRecord  # noqa: E402
 
 
-SOURCE_NAME = "market_fx_preflight"
-SOURCE_LEVEL = "third_party"
+SOURCE_NAME = "market_fx_stub"
+LIVE_SOURCE_NAME = "Yahoo Finance via yfinance"
+SOURCE_LEVEL = "test"
 FETCHER_NAME = "market_fx_fetcher"
-FETCHER_VERSION = "market_fx_v1"
+FETCHER_VERSION = "market_fx_v2"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "raw"
 URL_OR_REFERENCE = "fixture_or_future_market_fx_provider"
 
@@ -58,14 +59,16 @@ def fetch_market_fx_daily(
     report_date: str,
     rows_provider: RowsProvider | None = None,
     fetched_at: str | None = None,
+    provider_client: Any | None = None,
 ) -> dict[str, Any]:
     """Fetch or receive market/fx rows and emit raw_data_contract_v1."""
 
     final_fetched_at = fetched_at or _now_shanghai()
     try:
-        rows = rows_provider(report_date) if rows_provider else _fetch_rows_live(report_date)
+        rows = rows_provider(report_date) if rows_provider else _fetch_rows_live(report_date, provider_client)
     except Exception as exc:  # noqa: BLE001 - fetcher failures are structured.
-        return _failure_result(report_date, final_fetched_at, f"market_fx fetch failed: {exc}")
+        source_name = SOURCE_NAME if rows_provider else LIVE_SOURCE_NAME
+        return _failure_result(report_date, final_fetched_at, f"market_fx fetch failed: {exc}", source_name=source_name)
 
     return build_fetch_result_from_rows(rows, report_date, final_fetched_at)
 
@@ -77,14 +80,25 @@ def build_fetch_result_from_rows(
 ) -> dict[str, Any]:
     final_fetched_at = fetched_at or _now_shanghai()
     row = _row_to_dict(rows)
+    field_metadata = row.get("field_metadata", {})
+    if not isinstance(field_metadata, dict):
+        field_metadata = {}
     warnings: list[str] = []
     errors: list[str] = []
     records: list[RawDataRecord] = []
+    has_field_warning = False
 
     if not row:
         return _failure_result(report_date, final_fetched_at, "market_fx provider returned no usable row")
 
+    is_real_provider = bool(row.get("is_real_provider", False))
+    source_name = str(row.get("source_name") or SOURCE_NAME) if is_real_provider else SOURCE_NAME
+    source_level = str(row.get("source_level") or "third_party") if is_real_provider else SOURCE_LEVEL
+
     for field_name, config in FIELD_CONFIG.items():
+        overrides = field_metadata.get(field_name, {})
+        if not isinstance(overrides, dict):
+            overrides = {}
         value = _to_float(_get_value(row, field_name))
         if value is None:
             message = f"{field_name}: missing or non-numeric value"
@@ -94,22 +108,55 @@ def build_fetch_result_from_rows(
                 warnings.append(message)
             continue
 
-        field_date = _clean_date(_get_value(row, f"{field_name}_date") or row.get("date")) or report_date
+        field_date = (
+            _clean_date(
+                overrides.get("actual_data_date")
+                or overrides.get("date")
+                or overrides.get("data_time")
+                or _get_value(row, f"{field_name}_date")
+                or row.get("date")
+            )
+            or report_date
+        )
+        data_time = str(overrides.get("data_time") or field_date)
+        field_source_name = str(overrides.get("source_name") or source_name)
+        field_source_level = str(overrides.get("source_level") or source_level)
+        source_status = str(overrides.get("source_status") or "pass")
+        confidence = str(overrides.get("confidence") or "medium")
+        fallback_used = bool(overrides.get("fallback_used", False))
         metadata = {
             "unit": config["unit"],
             "date": field_date,
+            "data_time": data_time,
             "timezone": config["timezone"],
-            "source_name": str(row.get("source_name") or SOURCE_NAME),
-            "source_field": config["source_field"],
-            "source_level": SOURCE_LEVEL,
+            "source_name": field_source_name,
+            "source_field": str(overrides.get("source_field") or config["source_field"]),
+            "source_level": field_source_level,
             "fetcher_name": FETCHER_NAME,
             "fetched_at": final_fetched_at,
-            "url_or_reference": str(row.get("url_or_reference") or URL_OR_REFERENCE),
+            "url_or_reference": str(overrides.get("url_or_reference") or row.get("url_or_reference") or URL_OR_REFERENCE),
+            "is_real_provider": bool(overrides.get("is_real_provider", is_real_provider)),
+            "source_status": source_status,
+            "confidence": confidence,
+            "fallback_used": fallback_used,
         }
-        if field_date != report_date:
+        provider_metadata = overrides.get("provider_metadata")
+        if isinstance(provider_metadata, dict):
+            metadata["provider_metadata"] = provider_metadata
+        if field_date != report_date or fallback_used:
             metadata["fallback_used"] = True
+            metadata["source_status"] = "warning"
+            metadata["confidence"] = "low"
+            metadata["original_report_date"] = str(overrides.get("original_report_date") or report_date)
+            metadata["actual_data_date"] = str(overrides.get("actual_data_date") or field_date)
             metadata["fallback_reason"] = "latest_available_date differs from report_date"
+            metadata["data_alignment_note"] = str(
+                overrides.get("data_alignment_note")
+                or "market/fx provider returned latest available data before report_date"
+            )
             warnings.append(f"{field_name}: using latest available date {field_date} for report_date {report_date}")
+        if metadata["source_status"] == "warning":
+            has_field_warning = True
 
         records.append(
             RawDataRecord(
@@ -120,10 +167,10 @@ def build_fetch_result_from_rows(
             )
         )
 
-    status = "fail" if errors else "warning" if warnings else "pass"
+    status = "fail" if errors else "warning" if warnings or has_field_warning else "pass"
     return FetchResult(
         report_date=report_date,
-        source_name=str(row.get("source_name") or SOURCE_NAME),
+        source_name=source_name,
         fetcher_name=FETCHER_NAME,
         fetcher_version=FETCHER_VERSION,
         fetched_at=final_fetched_at,
@@ -167,8 +214,10 @@ def main(argv: list[str] | None = None) -> int:
     return 2 if raw_data["fetch_status"] == "fail" else 0
 
 
-def _fetch_rows_live(_report_date: str) -> dict[str, Any]:
-    raise RuntimeError("live market_fx providers are not enabled in v0.6 preflight")
+def _fetch_rows_live(report_date: str, provider_client: Any | None = None) -> dict[str, Any]:
+    from src.fetchers.providers.market_fx_provider import fetch_market_fx_live_rows
+
+    return fetch_market_fx_live_rows(report_date, client=provider_client)
 
 
 def _row_to_dict(rows: Any) -> dict[str, Any]:
@@ -222,10 +271,15 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
-def _failure_result(report_date: str, fetched_at: str, error: str) -> dict[str, Any]:
+def _failure_result(
+    report_date: str,
+    fetched_at: str,
+    error: str,
+    source_name: str = SOURCE_NAME,
+) -> dict[str, Any]:
     return FetchResult(
         report_date=report_date,
-        source_name=SOURCE_NAME,
+        source_name=source_name,
         fetcher_name=FETCHER_NAME,
         fetcher_version=FETCHER_VERSION,
         fetched_at=fetched_at,

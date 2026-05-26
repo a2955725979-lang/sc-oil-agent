@@ -71,6 +71,41 @@ def test_required_missing_with_downgrade_warns() -> None:
     assert_equal(result["source_status"], "warning", "downgradable required missing field")
 
 
+def test_eia_explicit_warning_stub_warns_not_fails() -> None:
+    result = validate_field(
+        "EIA_crude_inventory",
+        None,
+        metadata={
+            "source_status": "warning",
+            "confidence": "low",
+            "eia_warning_stub": True,
+            "fallback_used": True,
+            "pending_manual_review": True,
+        },
+        rule_config={
+            "required": True,
+            "quality_checks": ["missing_check", "stale_check", "revision_check"],
+            "fail_action": "report_as_missing",
+        },
+    )
+    assert_equal(result["source_status"], "warning", "explicit EIA stub should warn")
+    assert_contains(result["warnings"], "not confirmed inventory data", "stub warning should be explicit")
+
+
+def test_eia_null_without_explicit_stub_can_still_fail() -> None:
+    result = validate_field(
+        "EIA_crude_inventory",
+        None,
+        metadata={"source_status": "warning", "fallback_used": True},
+        rule_config={
+            "required": True,
+            "quality_checks": ["missing_check"],
+            "fail_action": "report_as_missing",
+        },
+    )
+    assert_equal(result["source_status"], "fail", "plain null EIA should not pass as stub")
+
+
 def test_optional_allow_empty_passes() -> None:
     result = validate_field(
         "manual_notes",

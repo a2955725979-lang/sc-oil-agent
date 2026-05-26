@@ -201,7 +201,7 @@ python src/workflows/run_semiauto_daily.py \
 
 ## Auto Daily Preflight
 
-v0.6 Auto Daily Preflight 的目标是：没有 `manual_supplement` 时，也能自动组装最小可运行 `daily_input_schema_v1`，并跑完既有本地日报 pipeline。当前阶段仍不接 Agent / LLM，不做联网搜索解释，不生成交易建议。
+v0.6 Auto Daily Preflight 的目标是：没有 `manual_supplement` 时，也能自动组装最小可运行 `daily_input_schema_v1`，并跑完既有本地日报 pipeline。v0.7-step1 在此基础上增加 Yahoo/yfinance market_fx 真实抓取尝试，用于 `USD_CNY`、`Brent_close`、`WTI_close`。当前状态仍是 auto preflight complete, but not fully automatic：`EIA_crude_inventory` 只有 warning stub，Yahoo/yfinance 也只是免费公开便利源，不是交易所官方源或终端级数据源。当前阶段仍不接 Agent / LLM，不做联网搜索解释，不生成交易建议。
 
 自动链路：
 
@@ -216,6 +216,11 @@ market_fx.py
 → transform.py
 → market_fx_daily_input
 
+eia_inventory.py
+→ raw_data warning stub 或传入 raw_data
+→ transform.py
+→ eia_daily_input
+
 default_fields.py
 → default_fields daily_input
 
@@ -224,13 +229,13 @@ merge_daily_input.py
 → run_daily_pipeline.py
 ```
 
-真实 provider 可用时的运行方式：
+默认运行方式会尝试实时抓取 AKShare SC 和 Yahoo/yfinance market/fx；如果任一必要市场字段无法取得，也会 controlled failure，不会编造价格：
 
 ```bash
 python src/pipeline/run_auto_daily.py --report-date YYYY-MM-DD --init-db
 ```
 
-如果已经有本地 fixture 或 smoke test raw_data，可以跳过实时 fetch：
+当前推荐的人类验收 / 本地可复现命令仍可使用已落地 raw_data，仍然不需要 `manual_supplement` 或人工 `daily_input`：
 
 ```bash
 python src/pipeline/run_auto_daily.py \
@@ -240,7 +245,33 @@ python src/pipeline/run_auto_daily.py \
   --init-db
 ```
 
-`market_fx.py` 第一版自动字段是 `USD_CNY`、`Brent_close`、`WTI_close`，输出仍然是 `raw_data_contract_v1`。默认文本字段包括 `exchange_notice`、`important_oil_news`、`manual_notes`、`OPEC_monthly_summary`、`IEA_monthly_summary`，全部标记为 warning / low confidence，不得用于强结论或交易判断。
+如果有真实或上一期 EIA raw_data，可以额外传入；不传时 `eia_inventory.py` 会生成 warning / low confidence stub：
+
+```bash
+python src/pipeline/run_auto_daily.py \
+  --report-date YYYY-MM-DD \
+  --raw-input data/raw/akshare_sc_YYYY-MM-DD.json \
+  --market-fx-raw-input data/raw/market_fx_YYYY-MM-DD.json \
+  --eia-raw-input data/raw/eia_inventory_YYYY-MM-DD.json \
+  --init-db
+```
+
+`market_fx.py` 自动字段是 `USD_CNY`、`Brent_close`、`WTI_close`，输出仍然是 `raw_data_contract_v1`。v0.7-step1 默认尝试 Yahoo/yfinance：`USD_CNY` 先取 `CNY=X`，失败后取同一 provider 的 `USDCNY=X`；Brent 使用 `BZ=F`，WTI 使用 `CL=F`。Yahoo/yfinance 是免费公开便利源，不是交易所官方源或终端级数据源；精确日期数据最高只标为 medium confidence。若周末、假日或时区 / 交易时段错位导致 provider 返回最近一个可用交易日，字段会标记 `fallback_used: true`、`source_status: warning`、`confidence: low`、`actual_data_date` 和 `data_alignment_note`。如果必要 market/fx 字段取不到，流程必须 controlled failure，不得静默 stub 或填占位价格。
+
+通过 `--market-fx-raw-input` 传入本地文件时，会跳过 live provider，继续作为可复现 / 测试模式。fixture 或 stub raw_data 必须显式标记 `source_name: market_fx_stub`、`source_level: test`、`is_real_provider: false`。`eia_inventory.py` 当前只明确处理 `EIA_crude_inventory` 的未配置状态，不声称真实抓取 EIA；只有带 `eia_warning_stub: true`、`fallback_used: true`、`pending_manual_review: true` 的 `null` 值才会被验证器降级为 warning，且绝不能当作确认库存数据。
+
+`manual_supplement` 可以覆盖任何自动生成、抓取、默认或计算字段；人工分析师输入拥有最高优先级。但覆盖绝不能静默发生。新增人工字段会标记 `merge_source: manual_supplement_added`，不会标记为 override。所有被覆盖字段都会写入 `merge_source: manual_supplement_override`、`manual_override_used: true`、`manual_override_source: manual_supplement`、覆盖前后数值、可用的上一来源 metadata 和 `manual_override_warning: manual_supplement replaced an existing auto/fetched/default/calculated field`。默认会降级为 `source_status: warning`、`pending_manual_review: true`，除非人工补充显式提供已复核的更强 metadata。
+
+```bash
+python src/pipeline/run_auto_daily.py \
+  --report-date YYYY-MM-DD \
+  --manual-supplement data/manual/manual_supplement_YYYY-MM-DD.json \
+  --init-db
+```
+
+如果人工直接提供 `SC_USD`、`SC_calendar_spread`、`SC_Brent_spread_simple`、`SC_WTI_spread_simple` 等计算字段，会保留该字段并标记 `calculation_method: manual_override`、`calculation_version: manual_override_v1`。如果只覆盖原始输入字段，则优先由现有计算器重新计算计算字段。最终 `daily_input.context` 会记录 `manual_override_count`、`manual_override_fields`、`manual_override_applied` 和 `manual_added_fields`。
+
+默认文本字段包括 `exchange_notice`、`important_oil_news`、`manual_notes`、`OPEC_monthly_summary`、`IEA_monthly_summary`，全部标记为 warning / low confidence，不得用于强结论或交易判断。
 
 当前 Auto Daily Preflight 的验收目标是“无人工 daily_input 也能跑出 warning 日报”，不是自动生成完整研究判断。失败降级规则见 `docs/auto_daily_policy.md`。
 

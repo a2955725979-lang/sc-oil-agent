@@ -35,6 +35,10 @@ from src.database.write_research_report import (  # noqa: E402
     ResearchReportWriteError,
     write_research_report,
 )
+from src.database.write_business_tables import (  # noqa: E402
+    BusinessTableWriteError,
+    write_business_tables as write_business_tables_to_db,
+)
 from src.calculators.spreads import (  # noqa: E402
     SpreadCalculationError,
     build_default_output_path as build_default_calculated_input_path,
@@ -82,7 +86,9 @@ def run_daily_pipeline(
     report_id: str | None = None,
     replace: bool = False,
     init_db: bool = False,
-) -> dict[str, str | None]:
+    write_business_tables: bool = False,
+    business_write_summary_output: str | Path | None = None,
+) -> dict[str, object | None]:
     """Run the complete local daily pipeline."""
 
     final_report_date = report_date or date.today().isoformat()
@@ -164,6 +170,21 @@ def run_daily_pipeline(
             report_id=report_id,
             replace=replace,
         )
+        if write_business_tables:
+            evidence_list_for_fail = final_evidence_list_path if final_evidence_list_path.exists() else None
+            business_summary = write_business_tables_to_db(
+                calculated_input_path=final_calculated_input_path,
+                quality_report_path=final_quality_report_path,
+                evidence_list_path=evidence_list_for_fail,
+                db_path=final_db_path,
+                data_snapshot_id=None,
+                research_report_id=result["research_report_id"],
+                write_core_tables=False,
+                write_evidence_database=evidence_list_for_fail is not None,
+                allow_fail_write=False,
+                summary_output_path=business_write_summary_output,
+            )
+            _copy_business_summary(result, business_summary, business_write_summary_output)
         return result
 
     data_snapshot_id = write_snapshot(
@@ -198,6 +219,20 @@ def run_daily_pipeline(
         report_id=report_id,
         replace=replace,
     )
+    if write_business_tables:
+        business_summary = write_business_tables_to_db(
+            calculated_input_path=final_calculated_input_path,
+            quality_report_path=final_quality_report_path,
+            evidence_list_path=final_evidence_list_path,
+            db_path=final_db_path,
+            data_snapshot_id=data_snapshot_id,
+            research_report_id=str(result["research_report_id"]) if result["research_report_id"] else None,
+            write_core_tables=True,
+            write_evidence_database=True,
+            allow_fail_write=False,
+            summary_output_path=business_write_summary_output,
+        )
+        _copy_business_summary(result, business_summary, business_write_summary_output)
     result["exit_code_meaning"] = "success_quality_pass_or_warning"
     return result
 
@@ -261,6 +296,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Safely create missing DB or check existing DB. Never resets or deletes data.",
     )
+    parser.add_argument(
+        "--write-business-tables",
+        action="store_true",
+        help="After research_reports is written, persist business tables and evidence_database.",
+    )
+    parser.add_argument(
+        "--business-write-summary-output",
+        help="Optional JSON summary path for business table writes.",
+    )
     return parser.parse_args(argv)
 
 
@@ -282,6 +326,8 @@ def main(argv: list[str] | None = None) -> int:
             report_id=args.report_id,
             replace=args.replace,
             init_db=args.init_db,
+            write_business_tables=args.write_business_tables,
+            business_write_summary_output=args.business_write_summary_output,
         )
     except (
         DailyPipelineError,
@@ -291,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         ResearchReportWriteError,
         SnapshotWriteError,
         SpreadCalculationError,
+        BusinessTableWriteError,
         FileNotFoundError,
         OSError,
         sqlite3.Error,
@@ -316,7 +363,30 @@ def _print_result(result: dict[str, str | None]) -> None:
     print(f"evidence_list_path: {result['evidence_list_path'] or ''}")
     print(f"daily_report_path: {result['daily_report_path']}")
     print(f"research_report_id: {result['research_report_id'] or ''}")
+    if "business_write_summary_path" in result:
+        print(f"business_write_summary_path: {result.get('business_write_summary_path') or ''}")
+        print(f"market_prices_written: {result.get('market_prices_written') or 0}")
+        print(f"fx_rates_written: {result.get('fx_rates_written') or 0}")
+        print(f"spreads_written: {result.get('spreads_written') or 0}")
+        print(f"evidence_written: {result.get('evidence_written') or 0}")
     print(f"exit_code_meaning: {result['exit_code_meaning']}")
+
+
+def _copy_business_summary(
+    result: dict[str, object | None],
+    summary: dict[str, object],
+    summary_output_path: str | Path | None,
+) -> None:
+    result["business_write_summary_path"] = _display_path(summary_output_path) if summary_output_path else None
+    for key in (
+        "market_prices_written",
+        "fx_rates_written",
+        "spreads_written",
+        "evidence_written",
+        "core_tables_written",
+        "evidence_database_written",
+    ):
+        result[key] = summary.get(key)
 
 
 def _display_path(path: str | Path) -> str:

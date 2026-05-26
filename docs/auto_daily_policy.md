@@ -1,42 +1,96 @@
 # Auto Daily Preflight Policy
 
-v0.6 Auto Daily Preflight 的目标是在没有人工 `daily_input` 的情况下，自动组装出最小可运行的 `daily_input_schema_v1`，并交给既有 `run_daily_pipeline.py` 完成计算、质检、快照、Evidence List、Markdown 日报和 `research_reports` 留痕。
+v0.6 Auto Daily Preflight 的目标是在没有人工 `daily_input` 的情况下，自动组装出最小可运行的 `daily_input_schema_v1`，并交给既有 `run_daily_pipeline.py` 完成计算、质检、快照、Evidence List、Markdown 日报和 `research_reports` 留痕。v0.7-step1 增加 Yahoo/yfinance market_fx 真实抓取尝试，用于 `USD_CNY`、`Brent_close`、`WTI_close`。
 
-这仍然不是最终自动化投研系统。当前阶段不接 Agent / LLM，不做联网搜索解释，不输出方向性交易建议，也不把默认文本字段当作真实研究依据。
+当前状态是：auto preflight complete, but not fully automatic。它不是最终自动化投研系统。当前阶段不接 Agent / LLM，不做联网搜索解释，不输出方向性交易建议，也不把默认文本字段、EIA 空值占位或 Yahoo/yfinance 免费便利源数据当作官方确认研究依据。
+
+## 运行命令
+
+如果本机已配置可用的 AKShare 和 yfinance，可以直接运行；若必要 market/fx 字段无法取得，流程会 controlled failure，不会编造价格：
+
+```bash
+python src/pipeline/run_auto_daily.py --report-date YYYY-MM-DD --init-db
+```
+
+当前推荐的人类验收 / 本地可复现命令是使用已落地的 raw_data 文件，仍然不需要 `manual_supplement` 或人工 `daily_input`：
+
+```bash
+python src/pipeline/run_auto_daily.py \
+  --report-date YYYY-MM-DD \
+  --raw-input data/raw/akshare_sc_YYYY-MM-DD.json \
+  --market-fx-raw-input data/raw/market_fx_YYYY-MM-DD.json \
+  --init-db
+```
+
+如果有真实或上一期 EIA raw_data，可以额外传入；不传时会生成 warning stub：
+
+```bash
+python src/pipeline/run_auto_daily.py \
+  --report-date YYYY-MM-DD \
+  --raw-input data/raw/akshare_sc_YYYY-MM-DD.json \
+  --market-fx-raw-input data/raw/market_fx_YYYY-MM-DD.json \
+  --eia-raw-input data/raw/eia_inventory_YYYY-MM-DD.json \
+  --init-db
+```
 
 ## 字段来源
 
-v0.6 第一阶段自动覆盖三类输入：
+当前自动覆盖四类输入：
 
 - AKShare SC fetcher：`SC_close`、`SC_settlement`、`SC_volume`、`SC_open_interest`、`SC_near_price`、`SC_next_price`。
-- market_fx fetcher：`USD_CNY`、`Brent_close`、`WTI_close`。
+- market_fx fetcher：`USD_CNY`、`Brent_close`、`WTI_close`。v0.7-step1 默认使用 Yahoo/yfinance：`USD_CNY` 先取 `CNY=X`，再取同一 provider fallback `USDCNY=X`；Brent 使用 `BZ=F`；WTI 使用 `CL=F`。
+- EIA inventory stub：`EIA_crude_inventory`，默认输出 `value: null`、`fetch_status: warning`，metadata 标记 `pending_manual_review: true` 和 `confidence: low`。
 - default fields：`exchange_notice`、`important_oil_news`、`manual_notes`、`OPEC_monthly_summary`、`IEA_monthly_summary`。
 
-`EIA_crude_inventory` 暂不自动抓取。现阶段缺失库存字段时，依赖数据字典的 warning 降级规则；后续 v0.6 Step 4 再接周度库存 fetcher。
+`EIA_crude_inventory` 还没有真实自动抓取。现阶段由 stub 明确写入 warning / low confidence 占位字段，并依赖数据字典的 warning 降级规则；后续再接周度库存 fetcher。
+
+## 合并与覆盖优先级
+
+自动合并的优先级固定为：
+
+```text
+manual_supplement > real fetched raw data > fallback raw data > explicit warning stub > default text fields
+```
+
+`manual_supplement` 可以覆盖任何自动生成、抓取、默认或计算字段；人工分析师输入拥有最高优先级。但覆盖绝不能静默发生。
+
+当 `manual_supplement` 新增一个自动输入中不存在的字段时，最终字段会保留人工值和人工 metadata，并标记 `merge_source: manual_supplement_added`；这不是覆盖，因此不会标记 `manual_override_used`。
+
+当 `manual_supplement` 覆盖已有字段时，最终 `daily_input` 的字段 metadata 必须保留 `merge_source: manual_supplement_override`、`manual_override_used: true`、`manual_override_source: manual_supplement`、覆盖前后数值、可用的上一来源 metadata（`previous_source_name`、`previous_source_status`、`previous_confidence`、`previous_unit`、`previous_data_time`、`previous_fetched_at`）和 `manual_override_warning: manual_supplement replaced an existing auto/fetched/default/calculated field`。默认还会降级为 `source_status: warning`、`confidence: low`（若人工未提供）和 `pending_manual_review: true`；只有人工补充显式提供 `source_status: pass` 且带 `human_reviewed` / `manual_reviewed` / `reviewed` 标记时，才保留更强的已复核状态。
+
+如果人工直接提供 `SC_USD`、`SC_calendar_spread`、`SC_Brent_spread_simple`、`SC_WTI_spread_simple` 等计算字段，会保留该字段并标记 `calculation_method: manual_override`、`calculation_version: manual_override_v1`。如果只覆盖原始输入字段，则优先由现有计算器重新计算计算字段。
+
+最终 `daily_input.context` 会写入 `manual_override_count`、`manual_override_fields`、`manual_override_applied` 和 `manual_added_fields`。
 
 ## 失败与降级策略
 
 | 字段或类别 | 当前策略 |
 | --- | --- |
 | `SC_close` / AKShare 主行情 | 缺失或 fetch_status 为 fail 时，视为 controlled data failure，不生成正常日报。 |
-| `USD_CNY` | 可使用最近一期，整体保留 warning，metadata 标注 stale / fallback。 |
-| `Brent_close` / `WTI_close` | 可使用最近一期，整体保留 warning，metadata 标注外盘日期和 fallback。 |
-| `EIA_crude_inventory` | 本阶段不自动抓取；缺失时保持 warning，不能用于强结论。 |
+| `USD_CNY` | Yahoo/yfinance 先尝试 `CNY=X`，再尝试同 provider 的 `USDCNY=X`。两者都失败时 controlled failure，不得编造。最近可用交易日只可作为 warning fallback。 |
+| `Brent_close` / `WTI_close` | Yahoo/yfinance 使用 `BZ=F` / `CL=F`。周末、假日或时区 / 交易时段错位时，最近可用交易日可作为 warning fallback，metadata 必须标注实际日期。 |
+| `EIA_crude_inventory` | 本阶段不真实自动抓取；默认写入 warning stub / `null` 值 / pending manual review，不能用于强结论。若传入真实或上一期 raw_data，必须保留 date / source metadata。 |
 | 文本类字段 | 自动填默认 warning、low confidence 文本，不得用于强结论或交易判断。 |
 
 原则是：
 
 ```text
 价格核心字段缺失 -> fail
-外盘 / 汇率可用最近一期 -> warning
-库存可用上一期或缺失 -> warning
+外盘 / 汇率可用最近交易日 -> warning
+库存可用上一期或显式空值占位 -> warning
 文本类字段默认空值 -> warning
 ```
+
+`EIA_crude_inventory` 只有在 `value: null` 且 metadata 同时包含 `eia_warning_stub: true`、`fallback_used: true`、`pending_manual_review: true`、`source_status: warning` 时，才会按 explicit warning stub 降级为 warning。它绝不能被视为已确认库存数据。
 
 ## 输出约束
 
 自动生成的最终输入必须是 `daily_input_schema_v1`。自动字段必须保留来源 metadata；默认文本字段必须写明 `source_status: warning` 和 `confidence: low`。
 
-当日报整体为 warning 时，报告必须保留降级原因，不能把默认文本、缺失库存或 stale 外盘数据包装成确定性研究结论。
+Yahoo/yfinance 是免费公开便利源，不是交易所官方源或终端级数据源。精确日期数据最高只标为 `confidence: medium`；若 provider 返回最近一个可用交易日，必须标记 `source_status: warning`、`confidence: low`、`fallback_used: true`、`original_report_date`、`actual_data_date` 和 `data_alignment_note`。market/fx 价格字段不得静默 stub、不得用占位值、不得伪造。
+
+fixture / stub raw_data 仍可用于可复现测试，但必须在 metadata 中保留 `source_name: market_fx_stub`、`source_level: test`、`is_real_provider: false`、`fetched_at` 和 `fallback_used`。
+
+当日报整体为 warning 时，报告必须保留降级原因，不能把默认文本、EIA stub 空值、缺失库存或 stale 外盘数据包装成确定性研究结论。
 
 `run_auto_daily.py` 只负责自动生成 `daily_input` 并调用现有 pipeline。它不重写计算、质检、入库或报告生成逻辑，也不修改数据库 schema。

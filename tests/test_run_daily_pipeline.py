@@ -101,6 +101,26 @@ def research_report_rows(db_path: Path) -> list[dict]:
         ]
 
 
+def table_count(db_path: Path, table_name: str) -> int:
+    with sqlite3.connect(db_path) as conn:
+        return conn.execute(f"SELECT COUNT(*) FROM {table_name};").fetchone()[0]
+
+
+def evidence_rows(db_path: Path) -> list[dict]:
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        return [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT evidence_id, report_id, data_snapshot_id
+                FROM evidence_database
+                ORDER BY evidence_id;
+                """
+            ).fetchall()
+        ]
+
+
 def pipeline_args(
     input_path: Path,
     dictionary_path: Path,
@@ -185,6 +205,65 @@ def test_warning_status_runs_complete_pipeline() -> None:
     assert_equal(json.loads(reports[0]["evidence_ids"])[0], "EVID-20260522-001", "evidence ids should be stored")
 
 
+def test_warning_status_writes_business_tables_after_research_report() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        db_path = root / "sc_oil.sqlite"
+        config_path = root / "config.yaml"
+        calculated_input_path = root / "processed" / "calculated_input.json"
+        quality_report_path = root / "processed" / "quality_report.json"
+        evidence_list_path = root / "processed" / "evidence_list.json"
+        daily_report_path = root / "reports" / "SC_daily.md"
+        summary_path = root / "processed" / "business_summary.json"
+        report_id = "RPT-BUSINESS-PIPELINE"
+        snapshot_id = "SNAP-BUSINESS-PIPELINE"
+
+        write_config(config_path)
+        exit_code = main(
+            pipeline_args(
+                EXAMPLE_INPUT,
+                PROJECT_DICTIONARY,
+                db_path,
+                config_path,
+                calculated_input_path,
+                quality_report_path,
+                evidence_list_path,
+                daily_report_path,
+                extra_args=[
+                    "--init-db",
+                    "--snapshot-id",
+                    snapshot_id,
+                    "--report-id",
+                    report_id,
+                    "--write-business-tables",
+                    "--business-write-summary-output",
+                    str(summary_path),
+                ],
+            )
+        )
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        reports = research_report_rows(db_path)
+        evidence = evidence_rows(db_path)
+        market_count = table_count(db_path, "market_prices")
+        fx_count = table_count(db_path, "fx_rates")
+        spread_count = table_count(db_path, "spread_table")
+
+    assert_equal(exit_code, 0, "business table pipeline should succeed")
+    assert_equal(len(reports), 1, "research report should be written first")
+    assert_equal(reports[0]["report_id"], report_id, "explicit report id")
+    assert_equal(summary["research_report_id"], report_id, "summary report id")
+    assert_equal(summary["data_snapshot_id"], snapshot_id, "summary snapshot id")
+    assert_equal(summary["market_prices_written"], 3, "market rows")
+    assert_equal(summary["fx_rates_written"], 1, "fx rows")
+    assert_equal(summary["spreads_written"], 1, "spread rows")
+    assert_equal(market_count, 3, "market_prices count")
+    assert_equal(fx_count, 1, "fx_rates count")
+    assert_equal(spread_count, 1, "spread_table count")
+    assert_equal(summary["evidence_written"], len(evidence), "evidence summary count")
+    assert_equal(evidence[0]["report_id"], report_id, "evidence report FK")
+    assert_equal(evidence[0]["data_snapshot_id"], snapshot_id, "evidence snapshot FK")
+
+
 def test_fail_status_writes_fail_report_without_snapshot_or_evidence() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -236,6 +315,62 @@ def test_fail_status_writes_fail_report_without_snapshot_or_evidence() -> None:
         "fail report conclusion should be fixed",
     )
     assert_contains(markdown, "数据质量状态为 fail", "fail Markdown should explain failure")
+
+
+def test_fail_status_write_business_tables_does_not_write_core_tables() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        input_path = root / "daily_input.json"
+        dictionary_path = root / "dictionary.yaml"
+        db_path = root / "sc_oil.sqlite"
+        config_path = root / "config.yaml"
+        calculated_input_path = root / "processed" / "calculated_input.json"
+        quality_report_path = root / "processed" / "quality_report.json"
+        evidence_list_path = root / "processed" / "evidence_list.json"
+        daily_report_path = root / "reports" / "SC_daily.md"
+        summary_path = root / "processed" / "business_summary.json"
+
+        write_json(input_path, failing_daily_input())
+        write_text(dictionary_path, dictionary_yaml())
+        write_config(config_path)
+
+        exit_code = main(
+            pipeline_args(
+                input_path,
+                dictionary_path,
+                db_path,
+                config_path,
+                calculated_input_path,
+                quality_report_path,
+                evidence_list_path,
+                daily_report_path,
+                extra_args=[
+                    "--init-db",
+                    "--write-business-tables",
+                    "--business-write-summary-output",
+                    str(summary_path),
+                ],
+            )
+        )
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        reports = research_report_rows(db_path)
+        market_count = table_count(db_path, "market_prices")
+        fx_count = table_count(db_path, "fx_rates")
+        spread_count = table_count(db_path, "spread_table")
+        evidence_count = table_count(db_path, "evidence_database")
+
+    assert_equal(exit_code, 2, "quality fail should still return 2")
+    assert_equal(len(reports), 1, "fail report should be written")
+    assert_equal(summary["core_tables_written"], False, "fail path should not write core tables")
+    assert_equal(summary["evidence_database_written"], False, "fail path should not write absent evidence")
+    assert_equal(summary["market_prices_written"], 0, "fail market rows")
+    assert_equal(summary["fx_rates_written"], 0, "fail fx rows")
+    assert_equal(summary["spreads_written"], 0, "fail spread rows")
+    assert_equal(summary["evidence_written"], 0, "fail evidence rows")
+    assert_equal(market_count, 0, "market_prices empty")
+    assert_equal(fx_count, 0, "fx_rates empty")
+    assert_equal(spread_count, 0, "spread_table empty")
+    assert_equal(evidence_count, 0, "evidence_database empty")
 
 
 def test_init_db_checks_existing_database_without_clearing_outputs() -> None:
@@ -413,7 +548,9 @@ def test_report_id_requires_replace_to_overwrite() -> None:
 def run() -> None:
     tests = [
         test_warning_status_runs_complete_pipeline,
+        test_warning_status_writes_business_tables_after_research_report,
         test_fail_status_writes_fail_report_without_snapshot_or_evidence,
+        test_fail_status_write_business_tables_does_not_write_core_tables,
         test_init_db_checks_existing_database_without_clearing_outputs,
         test_missing_database_without_init_returns_one,
         test_preserve_existing_calculations_keeps_input_values,

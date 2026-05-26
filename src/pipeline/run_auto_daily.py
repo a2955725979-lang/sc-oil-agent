@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.calculators.spreads import SpreadCalculationError  # noqa: E402
+from src.calculators.spreads import CALCULATED_FIELDS, SpreadCalculationError  # noqa: E402
 from src.database.init_db import DatabaseCheckError  # noqa: E402
 from src.database.write_research_report import ResearchReportWriteError  # noqa: E402
 from src.database.write_snapshot import SnapshotWriteError  # noqa: E402
@@ -28,6 +28,11 @@ from src.fetchers.default_fields import (  # noqa: E402
     build_default_daily_input as build_default_fields_daily_input,
     build_default_output_path as build_default_fields_path,
     write_daily_input,
+)
+from src.fetchers.eia_inventory import (  # noqa: E402
+    build_default_output_path as build_default_eia_raw_path,
+    fetch_eia_inventory_daily,
+    write_raw_data as write_eia_raw_data,
 )
 from src.fetchers.market_fx import (  # noqa: E402
     build_default_output_path as build_default_market_fx_raw_path,
@@ -43,6 +48,10 @@ from src.report_generator.generate_daily_report import DailyReportGenerationErro
 EXIT_SUCCESS = 0
 EXIT_PROGRAM_ERROR = 1
 EXIT_CONTROLLED_DATA_FAILURE = 2
+MANUAL_OVERRIDE_WARNING = "manual_supplement replaced an existing auto/fetched/default/calculated field"
+MANUAL_OVERRIDE_MERGE_SOURCE = "manual_supplement_override"
+MANUAL_ADDED_MERGE_SOURCE = "manual_supplement_added"
+REVIEWED_MARKERS = ("human_reviewed", "manual_reviewed", "reviewed")
 
 
 class AutoDailyWorkflowError(RuntimeError):
@@ -57,12 +66,20 @@ def build_default_market_fx_daily_input_path(report_date: str) -> Path:
     return PROJECT_ROOT / "data" / "processed" / f"market_fx_daily_input_{report_date}.json"
 
 
+def build_default_eia_daily_input_path(report_date: str) -> Path:
+    return PROJECT_ROOT / "data" / "processed" / f"eia_daily_input_{report_date}.json"
+
+
 def build_default_akshare_conversion_result_path(report_date: str) -> Path:
     return PROJECT_ROOT / "data" / "processed" / f"akshare_conversion_result_{report_date}.json"
 
 
 def build_default_market_fx_conversion_result_path(report_date: str) -> Path:
     return PROJECT_ROOT / "data" / "processed" / f"market_fx_conversion_result_{report_date}.json"
+
+
+def build_default_eia_conversion_result_path(report_date: str) -> Path:
+    return PROJECT_ROOT / "data" / "processed" / f"eia_conversion_result_{report_date}.json"
 
 
 def build_default_auto_daily_input_path(report_date: str) -> Path:
@@ -80,13 +97,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Existing AKShare raw_data JSON path. Skips live AKShare fetch.",
     )
     parser.add_argument("--market-fx-raw-input", help="Existing market/fx raw_data JSON path. Skips live market/fx fetch.")
+    parser.add_argument("--eia-raw-input", help="Existing EIA raw_data JSON path. Skips EIA preflight stub/fetch.")
     parser.add_argument("--akshare-raw-output", help="AKShare raw_data output JSON path.")
     parser.add_argument("--market-fx-raw-output", help="Market/fx raw_data output JSON path.")
+    parser.add_argument("--eia-raw-output", help="EIA raw_data output JSON path.")
     parser.add_argument("--akshare-daily-input-output", help="AKShare partial daily_input output JSON path.")
     parser.add_argument("--market-fx-daily-input-output", help="Market/fx partial daily_input output JSON path.")
+    parser.add_argument("--eia-daily-input-output", help="EIA partial daily_input output JSON path.")
     parser.add_argument("--default-fields-output", help="Default fields daily_input output JSON path.")
     parser.add_argument("--akshare-conversion-result-output", help="AKShare conversion diagnostics output JSON path.")
     parser.add_argument("--market-fx-conversion-result-output", help="Market/fx conversion diagnostics output JSON path.")
+    parser.add_argument("--eia-conversion-result-output", help="EIA conversion diagnostics output JSON path.")
     parser.add_argument("--auto-daily-input-output", help="Final auto daily_input output JSON path.")
     parser.add_argument("--calculated-input-output", help="Calculated input JSON output path.")
     parser.add_argument("--quality-report-output", help="Quality report JSON output path.")
@@ -98,6 +119,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--report-id", help="Explicit research report id.")
     parser.add_argument("--replace", action="store_true", help="Allow replacing an existing research report.")
     parser.add_argument("--init-db", action="store_true", help="Safely initialize or check the SQLite DB.")
+    parser.add_argument(
+        "--allow-manual-price-override",
+        action="store_true",
+        help="Deprecated compatibility flag. Manual overrides are allowed and audited by default.",
+    )
     parser.add_argument(
         "--preserve-existing-calculations",
         action="store_true",
@@ -143,12 +169,16 @@ def run_auto_daily(args: argparse.Namespace, summary: dict[str, str | None]) -> 
 
     akshare_raw_path = _resolve_akshare_raw_data(args, summary)
     market_fx_raw_path = _resolve_market_fx_raw_data(args, summary)
+    eia_raw_path = _resolve_eia_raw_data(args, summary)
 
     akshare_daily_input_path = Path(args.akshare_daily_input_output) if args.akshare_daily_input_output else (
         build_default_akshare_daily_input_path(report_date)
     )
     market_fx_daily_input_path = Path(args.market_fx_daily_input_output) if args.market_fx_daily_input_output else (
         build_default_market_fx_daily_input_path(report_date)
+    )
+    eia_daily_input_path = Path(args.eia_daily_input_output) if args.eia_daily_input_output else (
+        build_default_eia_daily_input_path(report_date)
     )
     default_fields_path = Path(args.default_fields_output) if args.default_fields_output else (
         build_default_fields_path(report_date)
@@ -163,6 +193,11 @@ def run_auto_daily(args: argparse.Namespace, summary: dict[str, str | None]) -> 
         if args.market_fx_conversion_result_output
         else build_default_market_fx_conversion_result_path(report_date)
     )
+    eia_conversion_result_path = (
+        Path(args.eia_conversion_result_output)
+        if args.eia_conversion_result_output
+        else build_default_eia_conversion_result_path(report_date)
+    )
     auto_daily_input_path = Path(args.auto_daily_input_output) if args.auto_daily_input_output else (
         build_default_auto_daily_input_path(report_date)
     )
@@ -172,9 +207,11 @@ def run_auto_daily(args: argparse.Namespace, summary: dict[str, str | None]) -> 
         {
             "akshare_daily_input_path": akshare_daily_input_path,
             "market_fx_daily_input_path": market_fx_daily_input_path,
+            "eia_daily_input_path": eia_daily_input_path,
             "default_fields_path": default_fields_path,
             "akshare_conversion_result_path": akshare_conversion_result_path,
             "market_fx_conversion_result_path": market_fx_conversion_result_path,
+            "eia_conversion_result_path": eia_conversion_result_path,
             "auto_daily_input_path": auto_daily_input_path,
         },
     )
@@ -201,19 +238,41 @@ def run_auto_daily(args: argparse.Namespace, summary: dict[str, str | None]) -> 
         summary["exit_code_meaning"] = "controlled_data_failure_market_fx_unusable"
         return EXIT_CONTROLLED_DATA_FAILURE
 
+    eia_conversion = convert_raw_data_file(
+        input_path=eia_raw_path,
+        output_path=eia_daily_input_path,
+        result_output_path=eia_conversion_result_path,
+    )
+    _validate_conversion_report_date(eia_conversion, report_date, "eia")
+    if not eia_conversion.get("usable_for_pipeline"):
+        summary["overall_status"] = "eia_conversion_unusable"
+        summary["exit_code_meaning"] = "controlled_data_failure_eia_unusable"
+        return EXIT_CONTROLLED_DATA_FAILURE
+
     default_daily_input = build_default_fields_daily_input(report_date)
     write_daily_input(default_daily_input, default_fields_path)
     market_fx_daily_input = _load_json(market_fx_daily_input_path)
+    eia_daily_input = _load_json(eia_daily_input_path)
     akshare_daily_input = _load_json(akshare_daily_input_path)
 
-    merged = merge_daily_inputs(default_daily_input, market_fx_daily_input)
+    merged = merge_daily_inputs(default_daily_input, eia_daily_input)
+    merged = merge_daily_inputs(merged, market_fx_daily_input)
     merged = merge_daily_inputs(merged, akshare_daily_input)
 
     if args.manual_supplement:
         manual_path = Path(args.manual_supplement)
         if not manual_path.exists():
             raise AutoDailyWorkflowError(f"manual supplement not found: {manual_path}")
-        merged = merge_daily_inputs(merged, _load_json(manual_path))
+        manual_daily_input = _load_json(manual_path)
+        manual_override_fields, manual_added_fields = _prepare_manual_override_audit(merged, manual_daily_input)
+        merged = merge_daily_inputs(merged, manual_daily_input)
+        _stamp_manual_merge_sources(merged, manual_override_fields, manual_added_fields)
+    else:
+        manual_override_fields = []
+        manual_added_fields = []
+
+    _set_manual_override_summary(merged, manual_override_fields, manual_added_fields)
+    preserve_manual_calculations = _has_manual_calculated_overrides(manual_override_fields)
 
     write_daily_input(merged, auto_daily_input_path)
 
@@ -224,7 +283,7 @@ def run_auto_daily(args: argparse.Namespace, summary: dict[str, str | None]) -> 
         "quality_report_output": args.quality_report_output,
         "evidence_list_output": args.evidence_list_output,
         "daily_report_output": args.daily_report_output,
-        "preserve_existing_calculations": args.preserve_existing_calculations,
+        "preserve_existing_calculations": args.preserve_existing_calculations or preserve_manual_calculations,
         "report_id": args.report_id,
         "replace": args.replace,
         "init_db": args.init_db,
@@ -272,6 +331,21 @@ def _resolve_market_fx_raw_data(args: argparse.Namespace, summary: dict[str, str
     return raw_path
 
 
+def _resolve_eia_raw_data(args: argparse.Namespace, summary: dict[str, str | None]) -> Path:
+    if args.eia_raw_input:
+        raw_path = Path(args.eia_raw_input)
+        if not raw_path.exists():
+            raise AutoDailyWorkflowError(f"EIA raw input not found: {raw_path}")
+        summary["eia_raw_data_path"] = _display_path(raw_path)
+        return raw_path
+
+    raw_path = Path(args.eia_raw_output) if args.eia_raw_output else build_default_eia_raw_path(args.report_date)
+    raw_data = fetch_eia_inventory_daily(args.report_date)
+    write_eia_raw_data(raw_data, raw_path)
+    summary["eia_raw_data_path"] = _display_path(raw_path)
+    return raw_path
+
+
 def _validate_conversion_report_date(conversion: dict[str, Any], requested_report_date: str, label: str) -> None:
     daily_input = conversion.get("daily_input")
     converted_report_date = ""
@@ -291,6 +365,157 @@ def _load_json(path: str | Path) -> dict[str, Any]:
     return data
 
 
+def _prepare_manual_override_audit(
+    base_daily_input: dict[str, Any],
+    manual_daily_input: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    base_fields = base_daily_input.get("fields", {})
+    manual_fields = manual_daily_input.get("fields", {})
+    if not isinstance(base_fields, dict) or not isinstance(manual_fields, dict):
+        return [], []
+
+    override_fields = sorted(set(base_fields).intersection(manual_fields) | CALCULATED_FIELDS.intersection(manual_fields))
+    added_fields = sorted(set(manual_fields) - set(base_fields) - CALCULATED_FIELDS)
+
+    for field_name in added_fields:
+        manual_payload = manual_fields.get(field_name)
+        if not isinstance(manual_payload, dict):
+            continue
+        metadata = _payload_metadata(manual_payload)
+        _apply_manual_metadata_defaults(metadata, force_pending_review=False)
+        metadata["merge_source"] = MANUAL_ADDED_MERGE_SOURCE
+        manual_payload["metadata"] = metadata
+
+    for field_name in override_fields:
+        manual_payload = manual_fields.get(field_name)
+        if not isinstance(manual_payload, dict):
+            continue
+        previous_payload = base_fields.get(field_name)
+        previous_metadata = _payload_metadata(previous_payload)
+        metadata = _payload_metadata(manual_payload)
+        metadata["manual_override_used"] = True
+        metadata["manual_override_source"] = "manual_supplement"
+        metadata["manual_override_previous_value"] = _payload_value(previous_payload)
+        metadata["manual_override_new_value"] = manual_payload.get("value")
+        metadata["manual_override_warning"] = MANUAL_OVERRIDE_WARNING
+        metadata["merge_source"] = MANUAL_OVERRIDE_MERGE_SOURCE
+        _apply_manual_metadata_defaults(metadata, force_pending_review=True)
+
+        previous_source_name = previous_metadata.get("source_name")
+        previous_source_status = previous_metadata.get("source_status")
+        previous_confidence = previous_metadata.get("confidence")
+        previous_unit = previous_metadata.get("unit")
+        previous_data_time = _previous_data_time(previous_metadata)
+        previous_fetched_at = previous_metadata.get("fetched_at")
+        if previous_source_name is not None:
+            metadata["previous_source_name"] = previous_source_name
+        if previous_source_status is not None:
+            metadata["previous_source_status"] = previous_source_status
+        if previous_confidence is not None:
+            metadata["previous_confidence"] = previous_confidence
+        if previous_unit is not None:
+            metadata["previous_unit"] = previous_unit
+        if previous_data_time is not None:
+            metadata["previous_data_time"] = previous_data_time
+        if previous_fetched_at is not None:
+            metadata["previous_fetched_at"] = previous_fetched_at
+
+        if not _has_stronger_reviewed_metadata(metadata):
+            metadata["source_status"] = "warning"
+            metadata["pending_manual_review"] = True
+
+        if field_name in CALCULATED_FIELDS:
+            metadata["calculation_method"] = "manual_override"
+            metadata["calculation_version"] = "manual_override_v1"
+            metadata["source_status"] = "warning"
+            metadata["confidence"] = "low"
+            metadata["pending_manual_review"] = True
+
+        manual_payload["metadata"] = metadata
+
+    return override_fields, added_fields
+
+
+def _stamp_manual_merge_sources(
+    daily_input: dict[str, Any],
+    override_fields: list[str],
+    added_fields: list[str],
+) -> None:
+    fields = daily_input.get("fields")
+    if not isinstance(fields, dict):
+        return
+    for field_name in override_fields:
+        payload = fields.get(field_name)
+        if not isinstance(payload, dict):
+            continue
+        metadata = _payload_metadata(payload)
+        metadata["merge_source"] = MANUAL_OVERRIDE_MERGE_SOURCE
+        payload["metadata"] = metadata
+    for field_name in added_fields:
+        payload = fields.get(field_name)
+        if not isinstance(payload, dict):
+            continue
+        metadata = _payload_metadata(payload)
+        metadata["merge_source"] = MANUAL_ADDED_MERGE_SOURCE
+        payload["metadata"] = metadata
+
+
+def _set_manual_override_summary(
+    daily_input: dict[str, Any],
+    override_fields: list[str],
+    added_fields: list[str],
+) -> None:
+    context = daily_input.get("context")
+    if not isinstance(context, dict):
+        context = {}
+    context["manual_override_count"] = len(override_fields)
+    context["manual_override_fields"] = list(override_fields)
+    context["manual_override_applied"] = bool(override_fields)
+    context["manual_added_fields"] = list(added_fields)
+    daily_input["context"] = context
+
+
+def _has_manual_calculated_overrides(override_fields: list[str]) -> bool:
+    return bool(CALCULATED_FIELDS.intersection(override_fields))
+
+
+def _payload_metadata(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        return metadata
+    return {}
+
+
+def _payload_value(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return None
+    return payload.get("value")
+
+
+def _apply_manual_metadata_defaults(metadata: dict[str, Any], force_pending_review: bool) -> None:
+    metadata.setdefault("source_name", "manual_supplement")
+    metadata.setdefault("source_status", "warning")
+    metadata.setdefault("confidence", "low")
+    if force_pending_review or not _has_stronger_reviewed_metadata(metadata):
+        metadata.setdefault("pending_manual_review", True)
+
+
+def _has_stronger_reviewed_metadata(metadata: dict[str, Any]) -> bool:
+    if metadata.get("source_status") != "pass":
+        return False
+    return any(metadata.get(marker) is True for marker in REVIEWED_MARKERS)
+
+
+def _previous_data_time(metadata: dict[str, Any]) -> Any:
+    for key in ("data_time", "date", "publish_time", "update_time"):
+        value = metadata.get(key)
+        if value is not None:
+            return value
+    return None
+
+
 def _initial_summary(args: argparse.Namespace) -> dict[str, str | None]:
     return {
         "report_date": args.report_date,
@@ -300,17 +525,26 @@ def _initial_summary(args: argparse.Namespace) -> dict[str, str | None]:
         "market_fx_raw_data_path": _display_path(
             args.market_fx_raw_input or args.market_fx_raw_output or build_default_market_fx_raw_path(args.report_date)
         ),
+        "eia_raw_data_path": _display_path(
+            args.eia_raw_input or args.eia_raw_output or build_default_eia_raw_path(args.report_date)
+        ),
         "akshare_conversion_result_path": _display_path(
             args.akshare_conversion_result_output or build_default_akshare_conversion_result_path(args.report_date)
         ),
         "market_fx_conversion_result_path": _display_path(
             args.market_fx_conversion_result_output or build_default_market_fx_conversion_result_path(args.report_date)
         ),
+        "eia_conversion_result_path": _display_path(
+            args.eia_conversion_result_output or build_default_eia_conversion_result_path(args.report_date)
+        ),
         "akshare_daily_input_path": _display_path(
             args.akshare_daily_input_output or build_default_akshare_daily_input_path(args.report_date)
         ),
         "market_fx_daily_input_path": _display_path(
             args.market_fx_daily_input_output or build_default_market_fx_daily_input_path(args.report_date)
+        ),
+        "eia_daily_input_path": _display_path(
+            args.eia_daily_input_output or build_default_eia_daily_input_path(args.report_date)
         ),
         "default_fields_path": _display_path(args.default_fields_output or build_default_fields_path(args.report_date)),
         "auto_daily_input_path": _display_path(
@@ -346,10 +580,13 @@ def _print_summary(summary: dict[str, str | None]) -> None:
         "report_date",
         "akshare_raw_data_path",
         "market_fx_raw_data_path",
+        "eia_raw_data_path",
         "akshare_conversion_result_path",
         "market_fx_conversion_result_path",
+        "eia_conversion_result_path",
         "akshare_daily_input_path",
         "market_fx_daily_input_path",
+        "eia_daily_input_path",
         "default_fields_path",
         "auto_daily_input_path",
         "quality_report_path",

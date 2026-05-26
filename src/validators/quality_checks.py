@@ -62,7 +62,18 @@ def validate_field(
 
     results = []
     if _is_missing(value) or "missing_check" in check_names:
-        results.append(_missing_check(field_name, value, rule_config, required_for_topic))
+        if _is_explicit_warning_stub(field_name, value, metadata):
+            results.append(
+                _result(
+                    "warning",
+                    warnings=[
+                        f"{field_name} is unavailable but explicitly marked as warning stub; "
+                        "not confirmed inventory data"
+                    ],
+                )
+            )
+        else:
+            results.append(_missing_check(field_name, value, rule_config, required_for_topic))
 
     if not _is_missing(value):
         for check_name in check_names:
@@ -321,6 +332,17 @@ def _is_missing(value: Any) -> bool:
     if isinstance(value, (list, tuple, set, dict)) and not value:
         return True
     return False
+
+
+def _is_explicit_warning_stub(field_name: str, value: Any, metadata: dict[str, Any]) -> bool:
+    if field_name != "EIA_crude_inventory" or not _is_missing(value):
+        return False
+    return (
+        metadata.get("eia_warning_stub") is True
+        and metadata.get("fallback_used") is True
+        and metadata.get("pending_manual_review") is True
+        and metadata.get("source_status") == "warning"
+    )
 
 
 def _parse_date(value: Any) -> date | None:
