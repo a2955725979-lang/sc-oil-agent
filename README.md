@@ -327,6 +327,33 @@ python scripts/run_real_date_smoke.py --report-date YYYY-MM-DD --init-db
 
 详细步骤、绿 / 黄 / 红验收标准和手工 SQL 检查见 `docs/real_date_smoke_test_runbook.md`。
 
+## LLM input package
+
+v0.8.1 增加 deterministic `llm_input_package_v1`，用于把现有 pipeline artifacts 打包成未来 LangGraph / LLM 层可消费的结构化 JSON。它不调用 LLM、不运行 Agent、不生成市场结论或交易信号，也不改变质检、Evidence、日报、业务表写入或数据库 schema。
+
+```bash
+python src/llm/generate_llm_input_package.py \
+  --calculated-input data/processed/calculated_input_YYYY-MM-DD.json \
+  --quality-report data/processed/quality_report_YYYY-MM-DD.json \
+  --evidence-list data/processed/evidence_list_YYYY-MM-DD.json \
+  --business-write-summary data/processed/business_write_summary_YYYY-MM-DD.json \
+  --daily-report reports/daily/SC_daily_YYYY-MM-DD.md \
+  --output data/processed/llm_input_package_YYYY-MM-DD.json
+```
+
+也可以在 pipeline 中显式开启：
+
+```bash
+python src/pipeline/run_daily_pipeline.py \
+  --report-date YYYY-MM-DD \
+  --input data/manual/daily_input_YYYY-MM-DD.json \
+  --init-db \
+  --generate-llm-input-package \
+  --llm-input-package-output data/processed/llm_input_package_YYYY-MM-DD.json
+```
+
+package 会保留 `overall_status`、字段 `source_status`、`confidence`、fallback / date alignment 信息和字段级 Evidence 边界。`evidence_items` 只能支持字段可用性和来源可追溯性，不能直接支持方向性市场结论。详细说明见 `docs/llm_input_package.md`。
+
 ## Fetcher 契约与 AKShare SC 行情
 
 v0.5 已冻结 `raw_data_contract_v1` 和 `daily_input_schema_v1`，并新增 AKShare SC 单源行情 fetcher v1。契约边界见 `docs/contracts.md`，接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。

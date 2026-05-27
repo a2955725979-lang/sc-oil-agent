@@ -138,6 +138,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--business-write-summary-output",
         help="Optional JSON summary path for business table writes.",
     )
+    parser.add_argument(
+        "--generate-llm-input-package",
+        action="store_true",
+        help="Pass through to run_daily_pipeline and generate a deterministic LLM input package.",
+    )
+    parser.add_argument("--llm-input-package-output", help="Optional LLM input package JSON output path.")
     return parser.parse_args(argv)
 
 
@@ -298,6 +304,8 @@ def run_auto_daily(args: argparse.Namespace, summary: dict[str, Any]) -> int:
         "init_db": args.init_db,
         "write_business_tables": args.write_business_tables,
         "business_write_summary_output": args.business_write_summary_output,
+        "generate_llm_input_package": args.generate_llm_input_package,
+        "llm_input_package_output": args.llm_input_package_output,
     }
     if args.dictionary:
         pipeline_kwargs["dictionary_path"] = args.dictionary
@@ -568,6 +576,7 @@ def _initial_summary(args: argparse.Namespace) -> dict[str, Any]:
         "daily_report_path": "",
         "research_report_id": "",
         "business_write_summary_path": "",
+        "llm_input_package_path": "",
         "market_prices_written": "",
         "fx_rates_written": "",
         "spreads_written": "",
@@ -589,6 +598,7 @@ def _copy_pipeline_result(summary: dict[str, Any], pipeline_result: dict[str, An
     summary["daily_report_path"] = pipeline_result.get("daily_report_path") or ""
     summary["research_report_id"] = pipeline_result.get("research_report_id") or ""
     summary["business_write_summary_path"] = pipeline_result.get("business_write_summary_path") or ""
+    summary["llm_input_package_path"] = pipeline_result.get("llm_input_package_path") or ""
     summary["market_prices_written"] = _optional_pipeline_value(pipeline_result, "market_prices_written")
     summary["fx_rates_written"] = _optional_pipeline_value(pipeline_result, "fx_rates_written")
     summary["spreads_written"] = _optional_pipeline_value(pipeline_result, "spreads_written")
@@ -622,6 +632,7 @@ def _print_summary(summary: dict[str, Any]) -> None:
         "daily_report_path",
         "research_report_id",
         "business_write_summary_path",
+        "llm_input_package_path",
         "market_prices_written",
         "fx_rates_written",
         "spreads_written",

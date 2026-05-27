@@ -397,6 +397,100 @@ def test_fail_status_write_business_tables_does_not_write_core_tables() -> None:
     assert_equal(evidence_count, 0, "evidence_database empty")
 
 
+def test_warning_status_generates_llm_input_package() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        db_path = root / "sc_oil.sqlite"
+        config_path = root / "config.yaml"
+        calculated_input_path = root / "processed" / "calculated_input.json"
+        quality_report_path = root / "processed" / "quality_report.json"
+        evidence_list_path = root / "processed" / "evidence_list.json"
+        daily_report_path = root / "reports" / "SC_daily.md"
+        llm_package_path = root / "processed" / "llm_input_package.json"
+        report_id = "RPT-LLM-PIPELINE"
+        snapshot_id = "SNAP-LLM-PIPELINE"
+
+        write_config(config_path)
+        exit_code = main(
+            pipeline_args(
+                EXAMPLE_INPUT,
+                PROJECT_DICTIONARY,
+                db_path,
+                config_path,
+                calculated_input_path,
+                quality_report_path,
+                evidence_list_path,
+                daily_report_path,
+                extra_args=[
+                    "--init-db",
+                    "--snapshot-id",
+                    snapshot_id,
+                    "--report-id",
+                    report_id,
+                    "--generate-llm-input-package",
+                    "--llm-input-package-output",
+                    str(llm_package_path),
+                ],
+            )
+        )
+        package = json.loads(llm_package_path.read_text(encoding="utf-8"))
+
+    assert_equal(exit_code, 0, "LLM package pipeline run should succeed")
+    assert_equal(package["schema_version"], "llm_input_package_v1", "LLM package schema")
+    assert_equal(package["data_snapshot_id"], snapshot_id, "LLM package snapshot id")
+    assert_equal(package["research_report_id"], report_id, "LLM package report id")
+    assert_equal(package["pipeline_status"]["overall_status"], "warning", "LLM package status")
+    assert_equal(len(package["evidence_items"]) > 0, True, "LLM package evidence included")
+
+
+def test_fail_status_can_generate_llm_input_package() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        input_path = root / "daily_input.json"
+        dictionary_path = root / "dictionary.yaml"
+        db_path = root / "sc_oil.sqlite"
+        config_path = root / "config.yaml"
+        calculated_input_path = root / "processed" / "calculated_input.json"
+        quality_report_path = root / "processed" / "quality_report.json"
+        evidence_list_path = root / "processed" / "evidence_list.json"
+        daily_report_path = root / "reports" / "SC_daily.md"
+        llm_package_path = root / "processed" / "llm_input_package.json"
+
+        write_json(input_path, failing_daily_input())
+        write_text(dictionary_path, dictionary_yaml())
+        write_config(config_path)
+
+        exit_code = main(
+            pipeline_args(
+                input_path,
+                dictionary_path,
+                db_path,
+                config_path,
+                calculated_input_path,
+                quality_report_path,
+                evidence_list_path,
+                daily_report_path,
+                extra_args=[
+                    "--init-db",
+                    "--generate-llm-input-package",
+                    "--llm-input-package-output",
+                    str(llm_package_path),
+                ],
+            )
+        )
+        package = json.loads(llm_package_path.read_text(encoding="utf-8"))
+
+    assert_equal(exit_code, 2, "quality fail should still return 2")
+    assert_equal(package["pipeline_status"]["overall_status"], "fail", "fail package status")
+    assert_equal(package["evidence_items"], [], "fail package has no evidence list")
+    assert_equal(package["quality_constraints"]["normal_market_explanation_allowed"], False, "fail package blocks explanation")
+    assert_contains(
+        "; ".join(package["notes"]),
+        "future LLM must not generate normal market explanation",
+        "fail package note",
+    )
+
+
 def test_init_db_checks_existing_database_without_clearing_outputs() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -575,6 +669,8 @@ def run() -> None:
         test_warning_status_writes_business_tables_after_research_report,
         test_fail_status_writes_fail_report_without_snapshot_or_evidence,
         test_fail_status_write_business_tables_does_not_write_core_tables,
+        test_warning_status_generates_llm_input_package,
+        test_fail_status_can_generate_llm_input_package,
         test_init_db_checks_existing_database_without_clearing_outputs,
         test_missing_database_without_init_returns_one,
         test_preserve_existing_calculations_keeps_input_values,

@@ -39,6 +39,9 @@ from src.database.write_business_tables import (  # noqa: E402
     BusinessTableWriteError,
     write_business_tables as write_business_tables_to_db,
 )
+from src.llm.generate_llm_input_package import (  # noqa: E402
+    generate_llm_input_package as generate_llm_input_package_file,
+)
 from src.calculators.spreads import (  # noqa: E402
     SpreadCalculationError,
     build_default_output_path as build_default_calculated_input_path,
@@ -88,6 +91,8 @@ def run_daily_pipeline(
     init_db: bool = False,
     write_business_tables: bool = False,
     business_write_summary_output: str | Path | None = None,
+    generate_llm_input_package: bool = False,
+    llm_input_package_output: str | Path | None = None,
 ) -> dict[str, object | None]:
     """Run the complete local daily pipeline."""
 
@@ -185,6 +190,18 @@ def run_daily_pipeline(
                 summary_output_path=business_write_summary_output,
             )
             _copy_business_summary(result, business_summary, business_write_summary_output)
+        if generate_llm_input_package:
+            _generate_and_copy_llm_input_package(
+                result=result,
+                calculated_input_path=final_calculated_input_path,
+                quality_report_path=final_quality_report_path,
+                evidence_list_path=final_evidence_list_path if final_evidence_list_path.exists() else None,
+                business_write_summary_path=business_write_summary_output if write_business_tables else None,
+                daily_report_path=final_daily_report_path,
+                output_path=llm_input_package_output,
+                data_snapshot_id=None,
+                research_report_id=str(result["research_report_id"]) if result["research_report_id"] else None,
+            )
         return result
 
     data_snapshot_id = write_snapshot(
@@ -233,6 +250,18 @@ def run_daily_pipeline(
             summary_output_path=business_write_summary_output,
         )
         _copy_business_summary(result, business_summary, business_write_summary_output)
+    if generate_llm_input_package:
+        _generate_and_copy_llm_input_package(
+            result=result,
+            calculated_input_path=final_calculated_input_path,
+            quality_report_path=final_quality_report_path,
+            evidence_list_path=final_evidence_list_path,
+            business_write_summary_path=business_write_summary_output if write_business_tables else None,
+            daily_report_path=final_daily_report_path,
+            output_path=llm_input_package_output,
+            data_snapshot_id=data_snapshot_id,
+            research_report_id=str(result["research_report_id"]) if result["research_report_id"] else None,
+        )
     result["exit_code_meaning"] = "success_quality_pass_or_warning"
     return result
 
@@ -305,6 +334,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--business-write-summary-output",
         help="Optional JSON summary path for business table writes.",
     )
+    parser.add_argument(
+        "--generate-llm-input-package",
+        action="store_true",
+        help="Generate deterministic LLM input package after report artifacts are written.",
+    )
+    parser.add_argument("--llm-input-package-output", help="Optional LLM input package JSON output path.")
     return parser.parse_args(argv)
 
 
@@ -328,6 +363,8 @@ def main(argv: list[str] | None = None) -> int:
             init_db=args.init_db,
             write_business_tables=args.write_business_tables,
             business_write_summary_output=args.business_write_summary_output,
+            generate_llm_input_package=args.generate_llm_input_package,
+            llm_input_package_output=args.llm_input_package_output,
         )
     except (
         DailyPipelineError,
@@ -369,6 +406,8 @@ def _print_result(result: dict[str, str | None]) -> None:
         print(f"fx_rates_written: {result.get('fx_rates_written') or 0}")
         print(f"spreads_written: {result.get('spreads_written') or 0}")
         print(f"evidence_written: {result.get('evidence_written') or 0}")
+    if "llm_input_package_path" in result:
+        print(f"llm_input_package_path: {result.get('llm_input_package_path') or ''}")
     print(f"exit_code_meaning: {result['exit_code_meaning']}")
 
 
@@ -387,6 +426,33 @@ def _copy_business_summary(
         "evidence_database_written",
     ):
         result[key] = summary.get(key)
+
+
+def _generate_and_copy_llm_input_package(
+    result: dict[str, object | None],
+    calculated_input_path: Path,
+    quality_report_path: Path,
+    evidence_list_path: Path | None,
+    business_write_summary_path: str | Path | None,
+    daily_report_path: Path,
+    output_path: str | Path | None,
+    data_snapshot_id: str | None,
+    research_report_id: str | None,
+) -> None:
+    package = generate_llm_input_package_file(
+        calculated_input_path=calculated_input_path,
+        quality_report_path=quality_report_path,
+        evidence_list_path=evidence_list_path,
+        business_write_summary_path=business_write_summary_path,
+        daily_report_path=daily_report_path,
+        output_path=output_path,
+        data_snapshot_id=data_snapshot_id,
+        research_report_id=research_report_id,
+    )
+    package_path = Path(output_path) if output_path else (
+        PROJECT_ROOT / "data" / "processed" / f"llm_input_package_{package['report_date']}.json"
+    )
+    result["llm_input_package_path"] = _display_path(package_path)
 
 
 def _display_path(path: str | Path) -> str:

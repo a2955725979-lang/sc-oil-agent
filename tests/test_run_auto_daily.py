@@ -443,6 +443,37 @@ def test_auto_daily_passes_business_table_flags_to_pipeline() -> None:
     assert_equal(spread_count, 1, "spread_table row count")
 
 
+def test_auto_daily_passes_llm_input_package_flags_to_pipeline() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        akshare_raw_path = root / "raw" / "akshare_sc.json"
+        market_fx_raw_path = root / "raw" / "market_fx.json"
+        llm_package_path = root / "processed" / "llm_input_package.json"
+        write_json(akshare_raw_path, build_akshare_raw_data())
+        write_json(market_fx_raw_path, build_market_fx_raw_data())
+        write_config(root / "config.yaml")
+
+        exit_code = workflow.main(
+            workflow_args(
+                root,
+                akshare_raw_path,
+                market_fx_raw_path,
+                extra_args=[
+                    "--generate-llm-input-package",
+                    "--llm-input-package-output",
+                    str(llm_package_path),
+                ],
+            )
+        )
+        package = load_json(llm_package_path)
+
+    assert_equal(exit_code, 0, "auto daily LLM package pass-through should succeed")
+    assert_equal(package["schema_version"], "llm_input_package_v1", "LLM package schema")
+    assert_equal(package["pipeline_status"]["overall_status"], "warning", "LLM package status")
+    assert_equal(package["research_report_id"], "RPT-AUTO-TEST", "LLM package report id")
+    assert_equal(len(package["field_facts"]) > 0, True, "LLM package field facts")
+
+
 def test_without_market_fx_raw_input_uses_live_fetch_and_runs_pipeline() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -825,6 +856,7 @@ def run() -> None:
     tests = [
         test_without_manual_supplement_runs_warning_daily_report_without_fetching,
         test_auto_daily_passes_business_table_flags_to_pipeline,
+        test_auto_daily_passes_llm_input_package_flags_to_pipeline,
         test_without_market_fx_raw_input_uses_live_fetch_and_runs_pipeline,
         test_optional_manual_supplement_can_override_default_text_and_add_eia,
         test_manual_supplement_can_override_sc_prices_with_audit_by_default,
