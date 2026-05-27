@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -66,7 +67,7 @@ def run_scheduled_daily(args: argparse.Namespace, command: list[str]) -> int:
     warnings: list[str] = []
     errors: list[str] = []
     lock_path = Path(args.lock_path)
-    lock_created = False
+    lock_id: str | None = None
     exit_code = EXIT_SCHEDULER_GUARD
 
     try:
@@ -91,7 +92,7 @@ def run_scheduled_daily(args: argparse.Namespace, command: list[str]) -> int:
                 warnings=warnings,
                 errors=errors,
             )
-        lock_created = True
+        lock_id = lock_result["lock_id"]
 
         run_args = build_run_auto_daily_args(args, report_date, report_id, artifacts)
         exit_code = run_auto_daily.main(run_args)
@@ -106,8 +107,8 @@ def run_scheduled_daily(args: argparse.Namespace, command: list[str]) -> int:
             errors=errors,
         )
     finally:
-        if lock_created:
-            release_lock(lock_path)
+        if lock_id:
+            release_lock(lock_path, lock_id)
 
 
 def default_report_date(now: datetime | None = None) -> str:
@@ -189,24 +190,38 @@ def acquire_lock(
         lock_path.unlink()
         warnings.append("stale scheduler lock removed by --force-unlock")
 
+    lock_id = uuid.uuid4().hex
     lock_payload = {
+        "lock_id": lock_id,
         "pid": os.getpid(),
         "report_date": report_date,
         "started_at": utc_now_iso(),
         "command": command,
     }
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text(json.dumps(lock_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"acquired": True, "warnings": warnings, "errors": errors}
+    try:
+        fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        errors.append(f"active scheduler lock exists: {display_path(lock_path)}")
+        return {"acquired": False, "warnings": warnings, "errors": errors}
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(lock_payload, handle, ensure_ascii=False, indent=2)
+    return {"acquired": True, "lock_id": lock_id, "warnings": warnings, "errors": errors}
 
 
-def release_lock(lock_path: Path) -> None:
+def release_lock(lock_path: Path, lock_id: str | None) -> None:
+    if not lock_id:
+        return
     final_lock_path = lock_path.expanduser().resolve()
-    if final_lock_path.exists():
-        try:
-            final_lock_path.unlink()
-        except OSError:
-            pass
+    if not final_lock_path.exists():
+        return
+    payload = read_lock(final_lock_path)
+    if payload.get("lock_id") != lock_id:
+        return
+    try:
+        final_lock_path.unlink()
+    except OSError:
+        pass
 
 
 def read_lock(lock_path: Path) -> dict[str, Any]:

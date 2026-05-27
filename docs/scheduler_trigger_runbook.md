@@ -80,12 +80,15 @@ The lock stores:
 
 ```json
 {
+  "lock_id": "...",
   "pid": 12345,
   "report_date": "YYYY-MM-DD",
   "started_at": "...",
   "command": ["--report-date", "YYYY-MM-DD"]
 }
 ```
+
+Lock creation is atomic. Lock cleanup is owner-aware, so a blocked or failed second process must not remove the first process's lock.
 
 Default timeout is 120 minutes:
 

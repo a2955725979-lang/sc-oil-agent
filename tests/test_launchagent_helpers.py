@@ -129,6 +129,42 @@ def test_install_writes_plist_and_runtime_dirs() -> None:
         assert_equal("--replace" in rendered, False, "replace absent by default")
 
 
+def test_install_load_calls_launchctl_unload_then_load() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        python_path = make_python(root / "bin" / "python")
+        plist_path = root / "LaunchAgents" / "com.sc-oil-agent.daily.plist"
+        calls: list[tuple[list[str], bool]] = []
+        original = install.run_launchctl
+
+        def fake_run_launchctl(command: list[str], check: bool):
+            calls.append((command, check))
+            return None
+
+        install.run_launchctl = fake_run_launchctl
+        try:
+            args = install.parse_args(
+                [
+                    "--project-root",
+                    str(root),
+                    "--python-executable",
+                    str(python_path),
+                    "--plist-output",
+                    str(plist_path),
+                    "--load",
+                ]
+            )
+            result = install.install_launchagent(args)
+            plist_exists = plist_path.exists()
+        finally:
+            install.run_launchctl = original
+
+    assert_equal(result["load"], True, "load marker")
+    assert_equal(plist_exists, True, "plist written before load")
+    assert_equal(calls[0], (["launchctl", "unload", str(plist_path)], False), "best-effort unload")
+    assert_equal(calls[1], (["launchctl", "load", str(plist_path)], True), "checked load")
+
+
 def test_uninstall_dry_run_preserves_plist() -> None:
     with TemporaryDirectory() as tmp:
         plist_path = Path(tmp) / "com.sc-oil-agent.daily.plist"
@@ -166,6 +202,7 @@ def run() -> None:
         test_invalid_hour_minute_and_missing_python_fail,
         test_install_dry_run_does_not_write_or_create_dirs,
         test_install_writes_plist_and_runtime_dirs,
+        test_install_load_calls_launchctl_unload_then_load,
         test_uninstall_dry_run_preserves_plist,
         test_uninstall_removes_plist_with_mocked_launchctl,
     ]

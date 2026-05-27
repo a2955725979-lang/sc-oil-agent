@@ -382,7 +382,7 @@ python scripts/install_launchagent.py \
   --minute 30
 ```
 
-LaunchAgent 环境变量很少，可能不继承 Terminal 的 conda/base 环境；`--python-executable` 建议传项目环境里的绝对 Python 路径。安装、卸载、健康检查、日志和回滚见 `docs/local_scheduler_runbook.md`。该本地调度仍不运行 Agent / LLM，不生成交易信号。
+LaunchAgent 环境变量很少，可能不继承 Terminal 的 conda/base 环境；`--python-executable` 建议传项目环境里的绝对 Python 路径。v1.0 trigger 使用 atomic lock 和 owner-aware cleanup，避免并发运行时误删其他进程的锁。安装、卸载、健康检查、日志和回滚见 `docs/local_scheduler_runbook.md`。该本地调度仍不运行 Agent / LLM，不生成交易信号。
 
 ## Fetcher 契约与 AKShare SC 行情
 

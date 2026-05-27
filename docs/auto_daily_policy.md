@@ -119,6 +119,12 @@ v0.9 Step 0 增加 `scripts/run_scheduled_daily.py`，作为外部 scheduler 可
 
 调度仍然是外部且显式 opt-in。trigger 保留 no Agent、no LLM call、no trading signal、no final directional conclusion 边界。详细操作见 `docs/scheduler_trigger_runbook.md`。
 
+## v1.0 本地无人值守调度
+
+v1.0 增加 macOS LaunchAgent helper、plist template、health check 和本地 scheduler runbook。LaunchAgent 只调用现有 `scripts/run_scheduled_daily.py`，不改变 Auto Daily 的 fetch、transform、validation、report、business table 或 LLM input package 逻辑。
+
+本地 scheduler trigger 使用 atomic lock 和 owner-aware cleanup；如果另一个进程未取得锁并退出，不得删除当前运行进程持有的 lock。实际安装仍然是用户显式 opt-in，且不需要 sudo。详细操作见 `docs/local_scheduler_runbook.md`。
+
 ## 输出约束
 
 自动生成的最终输入必须是 `daily_input_schema_v1`。自动字段必须保留来源 metadata；默认文本字段必须写明 `source_status: warning` 和 `confidence: low`。

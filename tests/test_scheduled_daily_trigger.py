@@ -101,15 +101,46 @@ def test_lock_file_contains_audit_metadata_and_releases() -> None:
             force_unlock=False,
         )
         payload = load_json(lock_path)
-        scheduled.release_lock(lock_path)
+        scheduled.release_lock(lock_path, result["lock_id"])
         exists_after_release = lock_path.exists()
 
     assert_equal(result["acquired"], True, "lock acquired")
+    assert_equal(payload["lock_id"], result["lock_id"], "lock id")
     assert_equal(payload["report_date"], REPORT_DATE, "lock report date")
     assert_equal(payload["command"], ["--report-date", REPORT_DATE], "lock command")
     assert_equal("pid" in payload, True, "lock pid")
     assert_equal("started_at" in payload, True, "lock started_at")
     assert_equal(exists_after_release, False, "lock released")
+
+
+def test_failed_lock_acquirer_does_not_delete_existing_owner_lock() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        lock_path = root / "scheduled.lock"
+        owner = scheduled.acquire_lock(
+            lock_path=lock_path,
+            report_date=REPORT_DATE,
+            command=["process-a"],
+            timeout_minutes=120,
+            force_unlock=False,
+        )
+        owner_payload = load_json(lock_path)
+        contender = scheduled.acquire_lock(
+            lock_path=lock_path,
+            report_date=REPORT_DATE,
+            command=["process-b"],
+            timeout_minutes=120,
+            force_unlock=False,
+        )
+        scheduled.release_lock(lock_path, contender.get("lock_id"))
+        payload_after_contender_exit = load_json(lock_path)
+        scheduled.release_lock(lock_path, owner["lock_id"])
+        exists_after_owner_release = lock_path.exists()
+
+    assert_equal(owner["acquired"], True, "owner acquired")
+    assert_equal(contender["acquired"], False, "contender blocked")
+    assert_equal(payload_after_contender_exit, owner_payload, "owner lock preserved")
+    assert_equal(exists_after_owner_release, False, "owner can release")
 
 
 def test_active_lock_exits_with_scheduler_guard_code() -> None:
@@ -289,6 +320,7 @@ def run() -> None:
         test_default_report_date_and_id_generation,
         test_run_auto_daily_args_include_required_flags_and_pass_through,
         test_lock_file_contains_audit_metadata_and_releases,
+        test_failed_lock_acquirer_does_not_delete_existing_owner_lock,
         test_active_lock_exits_with_scheduler_guard_code,
         test_stale_lock_requires_force_unlock_and_preserves_lock_without_it,
         test_stale_lock_with_force_unlock_runs_and_preserves_exit_code,

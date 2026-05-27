@@ -73,6 +73,8 @@ The installer creates:
 
 It does not require sudo and does not write to `/Library/LaunchDaemons`.
 
+If you use `--label`, it changes the LaunchAgent service label. Custom plist file names or log paths should still be provided explicitly with the relevant helper options or template changes.
+
 ## Load And Unload
 
 ```bash
@@ -151,6 +153,8 @@ Default lock:
 ```
 
 If a lock exists, inspect it before forcing unlock. It contains `pid`, `report_date`, `started_at`, and command details.
+
+The scheduled trigger creates the lock atomically and records an owner token. A process that fails to acquire the lock will not delete another process's lock during cleanup.
 
 Use `--force-unlock` only after verifying no scheduled run is still active:
 
