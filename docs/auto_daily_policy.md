@@ -83,6 +83,34 @@ manual_supplement > real fetched raw data > fallback raw data > explicit warning
 
 `EIA_crude_inventory` 只有在 `value: null` 且 metadata 同时包含 `eia_warning_stub: true`、`fallback_used: true`、`pending_manual_review: true`、`source_status: warning` 时，才会按 explicit warning stub 降级为 warning。它绝不能被视为已确认库存数据。
 
+## v0.7 业务表写入
+
+v0.7 Step 2 增加可选业务表写入，目标是把日频 pipeline 产物持久化到 `market_prices`、`fx_rates`、`spread_table` 和 `evidence_database`。该能力默认关闭；开启后也必须遵守既有 pipeline 顺序：
+
+```text
+calculated_input
+→ quality_report
+→ data_snapshot
+→ evidence_list
+→ Markdown report
+→ research_reports
+→ write_business_tables
+```
+
+业务表写入不新增数据源、不改 schema、不做实时 streaming，也不引入 Agent、LLM 推理或交易信号。`source_status`、字段 metadata 和 warning 必须尽量保留。
+
+`overall_status == fail` 时，默认不得写入 `market_prices`、`fx_rates` 或 `spread_table`，避免失败质量数据沉淀进历史行情表；只有独立 writer 显式 `--allow-fail-write` 时才允许 core table 写入。`evidence_database` 仍可在有 Evidence List 且 FK readiness 满足时写入。
+
+`evidence_database` 只保存字段级 Evidence。若传入 `research_report_id` 或 `data_snapshot_id`，writer 必须先确认对应 `research_reports` / `data_snapshot` 父记录存在；若未提供 ID，则对应 FK 可为 `NULL`。不得生成结论级 Evidence。
+
+## v0.7 Step 3 持久化验收
+
+端到端 DB persistence 通过 fixture-based replay 验证：测试使用本地 AKShare raw fixture、market_fx raw fixture、临时 SQLite DB 和 `--write-business-tables`，覆盖 Auto Daily Preflight 到 business tables 的完整路径。自动化测试不依赖真实网络。
+
+live smoke test 只作为手动操作记录在 `docs/daily_db_persistence_runbook.md`；Yahoo/yfinance 等免费公开 provider 不保证可用性或时效性。live 数据 stale / unavailable 时应 warning 或 controlled failure，不得伪造。
+
+fail-quality run 默认不写 `market_prices`、`fx_rates` 或 `spread_table`。`evidence_database` 只有在 `research_reports` / `data_snapshot` readiness 满足且 Evidence List 存在时才写入。
+
 ## 输出约束
 
 自动生成的最终输入必须是 `daily_input_schema_v1`。自动字段必须保留来源 metadata；默认文本字段必须写明 `source_status: warning` 和 `confidence: low`。

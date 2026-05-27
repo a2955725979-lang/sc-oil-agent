@@ -180,7 +180,7 @@ def run_daily_pipeline(
                 data_snapshot_id=None,
                 research_report_id=result["research_report_id"],
                 write_core_tables=False,
-                write_evidence_database=evidence_list_for_fail is not None,
+                write_evidence_database=True,
                 allow_fail_write=False,
                 summary_output_path=business_write_summary_output,
             )

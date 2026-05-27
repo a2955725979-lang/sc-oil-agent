@@ -129,6 +129,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Keep existing calculated fields instead of recalculating them.",
     )
+    parser.add_argument(
+        "--write-business-tables",
+        action="store_true",
+        help="Pass through to run_daily_pipeline and persist optional business tables after research_reports.",
+    )
+    parser.add_argument(
+        "--business-write-summary-output",
+        help="Optional JSON summary path for business table writes.",
+    )
     return parser.parse_args(argv)
 
 
@@ -164,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     return exit_code
 
 
-def run_auto_daily(args: argparse.Namespace, summary: dict[str, str | None]) -> int:
+def run_auto_daily(args: argparse.Namespace, summary: dict[str, Any]) -> int:
     report_date = args.report_date
 
     akshare_raw_path = _resolve_akshare_raw_data(args, summary)
@@ -287,6 +296,8 @@ def run_auto_daily(args: argparse.Namespace, summary: dict[str, str | None]) -> 
         "report_id": args.report_id,
         "replace": args.replace,
         "init_db": args.init_db,
+        "write_business_tables": args.write_business_tables,
+        "business_write_summary_output": args.business_write_summary_output,
     }
     if args.dictionary:
         pipeline_kwargs["dictionary_path"] = args.dictionary
@@ -300,7 +311,7 @@ def run_auto_daily(args: argparse.Namespace, summary: dict[str, str | None]) -> 
     return EXIT_CONTROLLED_DATA_FAILURE if pipeline_result["overall_status"] == "fail" else EXIT_SUCCESS
 
 
-def _resolve_akshare_raw_data(args: argparse.Namespace, summary: dict[str, str | None]) -> Path:
+def _resolve_akshare_raw_data(args: argparse.Namespace, summary: dict[str, Any]) -> Path:
     raw_input = args.akshare_raw_input
     if raw_input:
         raw_path = Path(raw_input)
@@ -316,7 +327,7 @@ def _resolve_akshare_raw_data(args: argparse.Namespace, summary: dict[str, str |
     return raw_path
 
 
-def _resolve_market_fx_raw_data(args: argparse.Namespace, summary: dict[str, str | None]) -> Path:
+def _resolve_market_fx_raw_data(args: argparse.Namespace, summary: dict[str, Any]) -> Path:
     if args.market_fx_raw_input:
         raw_path = Path(args.market_fx_raw_input)
         if not raw_path.exists():
@@ -331,7 +342,7 @@ def _resolve_market_fx_raw_data(args: argparse.Namespace, summary: dict[str, str
     return raw_path
 
 
-def _resolve_eia_raw_data(args: argparse.Namespace, summary: dict[str, str | None]) -> Path:
+def _resolve_eia_raw_data(args: argparse.Namespace, summary: dict[str, Any]) -> Path:
     if args.eia_raw_input:
         raw_path = Path(args.eia_raw_input)
         if not raw_path.exists():
@@ -516,7 +527,7 @@ def _previous_data_time(metadata: dict[str, Any]) -> Any:
     return None
 
 
-def _initial_summary(args: argparse.Namespace) -> dict[str, str | None]:
+def _initial_summary(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "report_date": args.report_date,
         "akshare_raw_data_path": _display_path(
@@ -556,26 +567,41 @@ def _initial_summary(args: argparse.Namespace) -> dict[str, str | None]:
         "evidence_list_path": "",
         "daily_report_path": "",
         "research_report_id": "",
+        "business_write_summary_path": "",
+        "market_prices_written": "",
+        "fx_rates_written": "",
+        "spreads_written": "",
+        "evidence_written": "",
         "exit_code_meaning": "",
     }
 
 
-def _set_paths(summary: dict[str, str | None], paths: dict[str, Path]) -> None:
+def _set_paths(summary: dict[str, Any], paths: dict[str, Path]) -> None:
     for key, value in paths.items():
         summary[key] = _display_path(value)
 
 
-def _copy_pipeline_result(summary: dict[str, str | None], pipeline_result: dict[str, str | None]) -> None:
+def _copy_pipeline_result(summary: dict[str, Any], pipeline_result: dict[str, Any]) -> None:
     summary["quality_report_path"] = pipeline_result.get("quality_report_path") or ""
     summary["overall_status"] = pipeline_result.get("overall_status") or ""
     summary["data_snapshot_id"] = pipeline_result.get("data_snapshot_id") or ""
     summary["evidence_list_path"] = pipeline_result.get("evidence_list_path") or ""
     summary["daily_report_path"] = pipeline_result.get("daily_report_path") or ""
     summary["research_report_id"] = pipeline_result.get("research_report_id") or ""
+    summary["business_write_summary_path"] = pipeline_result.get("business_write_summary_path") or ""
+    summary["market_prices_written"] = _optional_pipeline_value(pipeline_result, "market_prices_written")
+    summary["fx_rates_written"] = _optional_pipeline_value(pipeline_result, "fx_rates_written")
+    summary["spreads_written"] = _optional_pipeline_value(pipeline_result, "spreads_written")
+    summary["evidence_written"] = _optional_pipeline_value(pipeline_result, "evidence_written")
     summary["exit_code_meaning"] = pipeline_result.get("exit_code_meaning") or ""
 
 
-def _print_summary(summary: dict[str, str | None]) -> None:
+def _optional_pipeline_value(pipeline_result: dict[str, Any], key: str) -> Any:
+    value = pipeline_result.get(key)
+    return "" if value is None else value
+
+
+def _print_summary(summary: dict[str, Any]) -> None:
     for key in (
         "report_date",
         "akshare_raw_data_path",
@@ -595,9 +621,15 @@ def _print_summary(summary: dict[str, str | None]) -> None:
         "evidence_list_path",
         "daily_report_path",
         "research_report_id",
+        "business_write_summary_path",
+        "market_prices_written",
+        "fx_rates_written",
+        "spreads_written",
+        "evidence_written",
         "exit_code_meaning",
     ):
-        print(f"{key}: {summary.get(key) or ''}")
+        value = summary.get(key)
+        print(f"{key}: {'' if value is None else value}")
 
 
 def _display_path(path: str | Path) -> str:

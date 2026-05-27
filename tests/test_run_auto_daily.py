@@ -325,6 +325,11 @@ def research_report_rows(db_path: Path) -> list[dict]:
         ]
 
 
+def table_count(db_path: Path, table_name: str) -> int:
+    with sqlite3.connect(db_path) as conn:
+        return conn.execute(f"SELECT COUNT(*) FROM {table_name};").fetchone()[0]
+
+
 def test_without_manual_supplement_runs_warning_daily_report_without_fetching() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -394,6 +399,48 @@ def test_without_manual_supplement_runs_warning_daily_report_without_fetching() 
         assert_equal(term in markdown, False, f"auto report should not contain forbidden term {term}")
     assert_equal(len(reports), 1, "research report row should be written")
     assert_equal(reports[0]["report_status"], "warning", "research report status")
+
+
+def test_auto_daily_passes_business_table_flags_to_pipeline() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        akshare_raw_path = root / "raw" / "akshare_sc.json"
+        market_fx_raw_path = root / "raw" / "market_fx.json"
+        business_summary_path = root / "processed" / "business_summary.json"
+        write_json(akshare_raw_path, build_akshare_raw_data())
+        write_json(market_fx_raw_path, build_market_fx_raw_data())
+        write_config(root / "config.yaml")
+
+        exit_code = workflow.main(
+            workflow_args(
+                root,
+                akshare_raw_path,
+                market_fx_raw_path,
+                extra_args=[
+                    "--write-business-tables",
+                    "--business-write-summary-output",
+                    str(business_summary_path),
+                ],
+            )
+        )
+        summary = load_json(business_summary_path)
+        db_path = root / "sc_oil.sqlite"
+        reports = research_report_rows(db_path)
+        market_count = table_count(db_path, "market_prices")
+        fx_count = table_count(db_path, "fx_rates")
+        spread_count = table_count(db_path, "spread_table")
+        evidence_count = table_count(db_path, "evidence_database")
+
+    assert_equal(exit_code, 0, "auto daily business write pass-through should succeed")
+    assert_equal(summary["research_report_id"], "RPT-AUTO-TEST", "business summary report id")
+    assert_equal(summary["market_prices_written"], market_count, "auto daily market rows")
+    assert_equal(market_count >= 2, True, "auto daily should write available SC market rows")
+    assert_equal(summary["fx_rates_written"], 1, "auto daily fx rows")
+    assert_equal(summary["spreads_written"], 1, "auto daily spread rows")
+    assert_equal(summary["evidence_written"], evidence_count, "auto daily evidence rows")
+    assert_equal(len(reports), 1, "research report written before business tables")
+    assert_equal(fx_count, 1, "fx_rates row count")
+    assert_equal(spread_count, 1, "spread_table row count")
 
 
 def test_without_market_fx_raw_input_uses_live_fetch_and_runs_pipeline() -> None:
@@ -777,6 +824,7 @@ def test_market_fx_fail_returns_controlled_data_failure_without_pipeline_outputs
 def run() -> None:
     tests = [
         test_without_manual_supplement_runs_warning_daily_report_without_fetching,
+        test_auto_daily_passes_business_table_flags_to_pipeline,
         test_without_market_fx_raw_input_uses_live_fetch_and_runs_pipeline,
         test_optional_manual_supplement_can_override_default_text_and_add_eia,
         test_manual_supplement_can_override_sc_prices_with_audit_by_default,

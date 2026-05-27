@@ -186,6 +186,12 @@ def test_warning_status_runs_complete_pipeline() -> None:
         markdown = daily_report_path.read_text(encoding="utf-8")
         ids = snapshot_ids(db_path)
         reports = research_report_rows(db_path)
+        business_counts = {
+            "market": table_count(db_path, "market_prices"),
+            "fx": table_count(db_path, "fx_rates"),
+            "spread": table_count(db_path, "spread_table"),
+            "evidence": table_count(db_path, "evidence_database"),
+        }
 
     assert_equal(exit_code, 0, "warning quality should be a successful pipeline run")
     assert_equal(quality_report["overall_status"], "warning", "example should remain warning")
@@ -203,6 +209,11 @@ def test_warning_status_runs_complete_pipeline() -> None:
     assert_equal(reports[0]["data_snapshot_id"], "SNAP-CUSTOM-PIPELINE", "report should link snapshot")
     assert_equal(reports[0]["report_status"], "warning", "report status should be warning")
     assert_equal(json.loads(reports[0]["evidence_ids"])[0], "EVID-20260522-001", "evidence ids should be stored")
+    assert_equal(
+        business_counts,
+        {"market": 0, "fx": 0, "spread": 0, "evidence": 0},
+        "business tables should remain untouched by default",
+    )
 
 
 def test_warning_status_writes_business_tables_after_research_report() -> None:
@@ -247,6 +258,13 @@ def test_warning_status_writes_business_tables_after_research_report() -> None:
         market_count = table_count(db_path, "market_prices")
         fx_count = table_count(db_path, "fx_rates")
         spread_count = table_count(db_path, "spread_table")
+        with sqlite3.connect(db_path) as conn:
+            market_symbols = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT DISTINCT symbol FROM market_prices ORDER BY symbol;"
+                ).fetchall()
+            ]
 
     assert_equal(exit_code, 0, "business table pipeline should succeed")
     assert_equal(len(reports), 1, "research report should be written first")
@@ -257,6 +275,7 @@ def test_warning_status_writes_business_tables_after_research_report() -> None:
     assert_equal(summary["fx_rates_written"], 1, "fx rows")
     assert_equal(summary["spreads_written"], 1, "spread rows")
     assert_equal(market_count, 3, "market_prices count")
+    assert_equal(market_symbols, ["SC"], "market_prices should contain SC only")
     assert_equal(fx_count, 1, "fx_rates count")
     assert_equal(spread_count, 1, "spread_table count")
     assert_equal(summary["evidence_written"], len(evidence), "evidence summary count")
@@ -367,6 +386,11 @@ def test_fail_status_write_business_tables_does_not_write_core_tables() -> None:
     assert_equal(summary["fx_rates_written"], 0, "fail fx rows")
     assert_equal(summary["spreads_written"], 0, "fail spread rows")
     assert_equal(summary["evidence_written"], 0, "fail evidence rows")
+    assert_contains(
+        "; ".join(summary["warnings"]),
+        "evidence_database write skipped because evidence_list is absent",
+        "fail business summary should explain absent evidence",
+    )
     assert_equal(market_count, 0, "market_prices empty")
     assert_equal(fx_count, 0, "fx_rates empty")
     assert_equal(spread_count, 0, "spread_table empty")

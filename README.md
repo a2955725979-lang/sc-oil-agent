@@ -275,6 +275,48 @@ python src/pipeline/run_auto_daily.py \
 
 当前 Auto Daily Preflight 的验收目标是“无人工 daily_input 也能跑出 warning 日报”，不是自动生成完整研究判断。失败降级规则见 `docs/auto_daily_policy.md`。
 
+## Business table writing
+
+v0.7 Step 2 增加可选的业务表持久化目标。默认 pipeline 仍只写 `data_snapshot` 和 `research_reports`；只有显式开启时，才会把日频 pipeline 产物写入 `market_prices`、`fx_rates`、`spread_table` 和 `evidence_database`。这不是实时流式行情入库，也不新增 Agent、交易信号或 schema migration。
+
+独立 writer 可以先单独运行，且要求 `research_reports` / `data_snapshot` 父记录已存在后再写 Evidence FK：
+
+```bash
+python src/database/write_business_tables.py \
+  --calculated-input data/processed/calculated_input_YYYY-MM-DD.json \
+  --quality-report data/processed/quality_report_YYYY-MM-DD.json \
+  --evidence-list data/processed/evidence_list_YYYY-MM-DD.json \
+  --db db/sc_oil_research.sqlite \
+  --data-snapshot-id SNAP-YYYYMMDD-001 \
+  --research-report-id RPT-YYYYMMDD-SC-DAILY-001 \
+  --summary-output data/processed/business_write_summary_YYYY-MM-DD.json
+```
+
+也可以在日报 pipeline 中开启，写入顺序固定为 `calculated_input → quality_report → data_snapshot → evidence_list → Markdown report → research_reports → write_business_tables`：
+
+```bash
+python src/pipeline/run_daily_pipeline.py \
+  --report-date YYYY-MM-DD \
+  --input data/manual/daily_input_YYYY-MM-DD.json \
+  --init-db \
+  --write-business-tables \
+  --business-write-summary-output data/processed/business_write_summary_YYYY-MM-DD.json
+```
+
+Auto Daily Preflight 也只做透传：
+
+```bash
+python src/pipeline/run_auto_daily.py \
+  --report-date YYYY-MM-DD \
+  --init-db \
+  --write-business-tables \
+  --business-write-summary-output data/processed/business_write_summary_YYYY-MM-DD.json
+```
+
+写入是幂等的，重复写同一日报 artifact 不应产生重复行。`overall_status == fail` 时默认不会写 `market_prices`、`fx_rates` 或 `spread_table`；只有显式 `--allow-fail-write` 的独立 writer 才允许 fail core writes。`evidence_database` 保持字段级 Evidence，只在 FK readiness 满足后写入；不生成结论级 Evidence 或交易建议。
+
+个人日常验收与操作 runbook 见 `docs/daily_db_persistence_runbook.md`。这是 v0.7 Step 3 的 acceptance path：`--write-business-tables` 显式启用业务库持久化，默认 pipeline 仍保持安全关闭；`business_write_summary` 提供每次写入的行数审计。
+
 ## Fetcher 契约与 AKShare SC 行情
 
 v0.5 已冻结 `raw_data_contract_v1` 和 `daily_input_schema_v1`，并新增 AKShare SC 单源行情 fetcher v1。契约边界见 `docs/contracts.md`，接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。

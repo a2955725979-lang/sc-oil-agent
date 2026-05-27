@@ -32,10 +32,10 @@ def write_business_tables(
     db_path: str | Path = DEFAULT_DB_PATH,
     data_snapshot_id: str | None = None,
     research_report_id: str | None = None,
+    summary_output_path: str | Path | None = None,
     write_core_tables: bool = True,
     write_evidence_database: bool = True,
     allow_fail_write: bool = False,
-    summary_output_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Write core business tables and Evidence DB rows, returning a stable summary."""
 
@@ -43,7 +43,7 @@ def write_business_tables(
     quality_report = _load_json(quality_report_path)
     final_db_path = Path(db_path).expanduser().resolve()
     if not final_db_path.exists():
-        raise BusinessTableWriteError(f"Database file not found: {final_db_path}")
+        raise BusinessTableWriteError("Database not found. Run python src/database/init_db.py first.")
 
     warnings: list[str] = []
     errors: list[str] = []
@@ -63,9 +63,6 @@ def write_business_tables(
             warnings.append("evidence_database write skipped because evidence_list is absent")
 
     final_snapshot_id = data_snapshot_id
-    if final_snapshot_id is None and isinstance(evidence_report, dict):
-        raw_snapshot_id = evidence_report.get("data_snapshot_id")
-        final_snapshot_id = str(raw_snapshot_id) if raw_snapshot_id else None
 
     summary = _empty_summary(
         core_tables_written=effective_core_write,
@@ -95,9 +92,27 @@ def write_business_tables(
             if not isinstance(fields, dict):
                 raise BusinessTableWriteError("calculated input must include a fields object")
             report_date = str(quality_report.get("report_date") or calculated_input.get("report_date") or "")
-            summary["market_prices_written"] = _write_market_prices(conn, fields, status_by_field, report_date)
-            summary["fx_rates_written"] = _write_fx_rates(conn, fields, status_by_field, report_date)
-            summary["spreads_written"] = _write_spreads(conn, fields, status_by_field, report_date)
+            summary["market_prices_written"] = _write_market_prices(
+                conn,
+                fields,
+                status_by_field,
+                report_date,
+                warnings,
+            )
+            summary["fx_rates_written"] = _write_fx_rates(
+                conn,
+                fields,
+                status_by_field,
+                report_date,
+                warnings,
+            )
+            summary["spreads_written"] = _write_spreads(
+                conn,
+                fields,
+                status_by_field,
+                report_date,
+                warnings,
+            )
 
         if effective_evidence_write and isinstance(evidence_report, dict):
             summary["evidence_written"] = _write_evidence_database(
@@ -119,7 +134,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--evidence-list", help="Evidence List JSON path.")
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="SQLite database path.")
     parser.add_argument("--data-snapshot-id", help="Existing data_snapshot id for Evidence DB rows.")
-    parser.add_argument("--report-id", dest="research_report_id", help="Existing research_reports report_id.")
+    parser.add_argument(
+        "--research-report-id",
+        "--report-id",
+        dest="research_report_id",
+        help="Existing research_reports report_id.",
+    )
     parser.add_argument("--no-core-tables", action="store_false", dest="write_core_tables", help="Skip core tables.")
     parser.add_argument(
         "--no-evidence-database",
@@ -244,69 +264,93 @@ def _write_market_prices(
     fields: dict[str, Any],
     status_by_field: dict[str, str],
     report_date: str,
+    warnings: list[str],
 ) -> int:
     rows = []
+    seen_keys: set[tuple[str, str, str, str]] = set()
     sc_close = _field_number(fields, "SC_close")
     if sc_close is not None:
         metadata = _metadata(fields, "SC_close")
-        rows.append(
-            {
-                "date": _field_date(metadata, report_date),
-                "symbol": "SC",
-                "contract": _contract(metadata, "main"),
-                "open": None,
-                "high": None,
-                "low": None,
-                "close": sc_close,
-                "settlement": _field_number(fields, "SC_settlement"),
-                "volume": _field_number(fields, "SC_volume"),
-                "open_interest": _field_number(fields, "SC_open_interest"),
-                "currency": "CNY",
-                "unit": metadata.get("unit") or "CNY/barrel",
-                "source": _source(metadata),
-                "source_status": _field_status("SC_close", fields, status_by_field),
-                "update_time": _update_time(metadata),
-            }
-        )
-    for field_name, symbol, default_contract in (
-        ("Brent_close", "Brent", "BZ=F"),
-        ("WTI_close", "WTI", "CL=F"),
+        unit = metadata.get("unit") or "CNY/barrel"
+        row = {
+            "date": _field_date(metadata, report_date),
+            "symbol": "SC",
+            "contract": _contract(metadata, "SC_MAIN_UNKNOWN"),
+            "open": None,
+            "high": None,
+            "low": None,
+            "close": sc_close,
+            "settlement": _field_number(fields, "SC_settlement"),
+            "volume": _field_number(fields, "SC_volume"),
+            "open_interest": _field_number(fields, "SC_open_interest"),
+            "currency": _currency_for_unit(unit),
+            "unit": unit,
+            "source": _source(metadata),
+            "source_status": _field_status("SC_close", fields, status_by_field),
+            "update_time": _update_time(metadata),
+        }
+        rows.append(row)
+        seen_keys.add(_market_row_key(row))
+    else:
+        warnings.append("SC_close missing; market_prices main SC row skipped")
+
+    for field_name, default_contract in (
+        ("SC_near_price", "SC_NEAR_UNKNOWN"),
+        ("SC_next_price", "SC_NEXT_UNKNOWN"),
     ):
         value = _field_number(fields, field_name)
         if value is None:
+            warnings.append(f"{field_name} missing; market_prices row skipped")
             continue
         metadata = _metadata(fields, field_name)
-        rows.append(
-            {
-                "date": _field_date(metadata, report_date),
-                "symbol": symbol,
-                "contract": _contract(metadata, default_contract),
-                "open": None,
-                "high": None,
-                "low": None,
-                "close": value,
-                "settlement": None,
-                "volume": None,
-                "open_interest": None,
-                "currency": "USD",
-                "unit": metadata.get("unit") or "USD/barrel",
-                "source": _source(metadata),
-                "source_status": _field_status(field_name, fields, status_by_field),
-                "update_time": _update_time(metadata),
-            }
-        )
+        unit = metadata.get("unit") or "CNY/barrel"
+        row = {
+            "date": _field_date(metadata, report_date),
+            "symbol": "SC",
+            "contract": _contract(metadata, default_contract),
+            "open": None,
+            "high": None,
+            "low": None,
+            "close": value,
+            "settlement": None,
+            "volume": None,
+            "open_interest": None,
+            "currency": _currency_for_unit(unit),
+            "unit": unit,
+            "source": _source(metadata),
+            "source_status": _field_status(field_name, fields, status_by_field),
+            "update_time": _update_time(metadata),
+        }
+        row_key = _market_row_key(row)
+        if row_key in seen_keys:
+            warnings.append(f"{field_name} shares an existing market_prices key; duplicate row skipped")
+            continue
+        rows.append(row)
+        seen_keys.add(row_key)
     count = 0
     for row in rows:
         conn.execute(
             """
-            INSERT OR REPLACE INTO market_prices (
+            INSERT INTO market_prices (
                 date, symbol, contract, open, high, low, close, settlement,
                 volume, open_interest, currency, unit, source, source_status, update_time
             )
             VALUES (
                 :date, :symbol, :contract, :open, :high, :low, :close, :settlement,
                 :volume, :open_interest, :currency, :unit, :source, :source_status, :update_time
-            );
+            )
+            ON CONFLICT(date, symbol, contract, source) DO UPDATE SET
+                open = excluded.open,
+                high = excluded.high,
+                low = excluded.low,
+                close = excluded.close,
+                settlement = excluded.settlement,
+                volume = excluded.volume,
+                open_interest = excluded.open_interest,
+                currency = excluded.currency,
+                unit = excluded.unit,
+                source_status = excluded.source_status,
+                update_time = excluded.update_time;
             """,
             row,
         )
@@ -319,19 +363,27 @@ def _write_fx_rates(
     fields: dict[str, Any],
     status_by_field: dict[str, str],
     report_date: str,
+    warnings: list[str],
 ) -> int:
     usd_cny = _field_number(fields, "USD_CNY")
     if usd_cny is None:
+        warnings.append("USD_CNY missing; fx_rates row skipped")
         return 0
     metadata = _metadata(fields, "USD_CNY")
     conn.execute(
         """
-        INSERT OR REPLACE INTO fx_rates (
+        INSERT INTO fx_rates (
             date, pair, mid_price, close, intraday_price, source, source_status, update_time
         )
         VALUES (
             :date, :pair, :mid_price, :close, :intraday_price, :source, :source_status, :update_time
-        );
+        )
+        ON CONFLICT(date, pair, source) DO UPDATE SET
+            mid_price = excluded.mid_price,
+            close = excluded.close,
+            intraday_price = excluded.intraday_price,
+            source_status = excluded.source_status,
+            update_time = excluded.update_time;
         """,
         {
             "date": _field_date(metadata, report_date),
@@ -352,20 +404,33 @@ def _write_spreads(
     fields: dict[str, Any],
     status_by_field: dict[str, str],
     report_date: str,
+    warnings: list[str],
 ) -> int:
-    spread_fields = (
+    source_fields = (
+        "SC_close",
+        "Brent_close",
+        "WTI_close",
+        "USD_CNY",
         "SC_calendar_spread",
         "SC_Brent_spread_simple",
         "SC_WTI_spread_simple",
-        "SC_USD",
+        "SC_near_price",
+        "SC_next_price",
     )
-    if all(_field_number(fields, field_name) is None for field_name in spread_fields):
+    if all(_field_number(fields, field_name) is None for field_name in source_fields):
+        warnings.append("spread_table row skipped because no spread source fields were available")
         return 0
+    for field_name, column_name in (
+        ("Brent_close", "brent_price"),
+        ("WTI_close", "wti_price"),
+    ):
+        if _field_number(fields, field_name) is None:
+            warnings.append(f"{field_name} missing; spread_table.{column_name} left NULL")
     metadata = _metadata(fields, "SC_Brent_spread_simple") or _metadata(fields, "SC_calendar_spread")
     calendar_spread = _field_number(fields, "SC_calendar_spread")
     row = {
-        "date": _field_date(_metadata(fields, "SC_close") or metadata, report_date),
-        "sc_contract": _contract(_metadata(fields, "SC_close"), "main"),
+        "date": str(report_date)[:10],
+        "sc_contract": _contract(_metadata(fields, "SC_close"), "SC_MAIN_UNKNOWN"),
         "sc_close": _field_number(fields, "SC_close"),
         "brent_price": _field_number(fields, "Brent_close"),
         "wti_price": _field_number(fields, "WTI_close"),
@@ -376,24 +441,20 @@ def _write_spreads(
         "sc_wti_spread": _field_number(fields, "SC_WTI_spread_simple"),
         "sc_oman_spread": None,
         "sc_dubai_spread": None,
-        "near_contract": _contract(_metadata(fields, "SC_near_price"), "near"),
-        "far_contract": _contract(_metadata(fields, "SC_next_price"), "next"),
+        "near_contract": _contract_or_none(_metadata(fields, "SC_near_price")),
+        "far_contract": _contract_or_none(_metadata(fields, "SC_next_price")),
         "calendar_spread": calendar_spread,
         "structure_type": _structure_type(calendar_spread),
         "calculation_method": str(metadata.get("calculation_method") or "simple_fx_adjusted_v1"),
         "data_alignment_note": _data_alignment_note(fields),
         "source": "Python calculation",
         "source_status": _worst_status(
-            [
-                _field_status("SC_calendar_spread", fields, status_by_field),
-                _field_status("SC_Brent_spread_simple", fields, status_by_field),
-                _field_status("SC_WTI_spread_simple", fields, status_by_field),
-            ]
+            [_field_status(field_name, fields, status_by_field) for field_name in source_fields]
         ),
     }
     conn.execute(
         """
-        INSERT OR REPLACE INTO spread_table (
+        INSERT INTO spread_table (
             date, sc_contract, sc_close, brent_price, wti_price, oman_price, dubai_price,
             usd_cny, sc_brent_spread, sc_wti_spread, sc_oman_spread, sc_dubai_spread,
             near_contract, far_contract, calendar_spread, structure_type, calculation_method,
@@ -404,7 +465,24 @@ def _write_spreads(
             :usd_cny, :sc_brent_spread, :sc_wti_spread, :sc_oman_spread, :sc_dubai_spread,
             :near_contract, :far_contract, :calendar_spread, :structure_type, :calculation_method,
             :data_alignment_note, :source, :source_status
-        );
+        )
+        ON CONFLICT(date, sc_contract, calculation_method, source) DO UPDATE SET
+            sc_close = excluded.sc_close,
+            brent_price = excluded.brent_price,
+            wti_price = excluded.wti_price,
+            oman_price = excluded.oman_price,
+            dubai_price = excluded.dubai_price,
+            usd_cny = excluded.usd_cny,
+            sc_brent_spread = excluded.sc_brent_spread,
+            sc_wti_spread = excluded.sc_wti_spread,
+            sc_oman_spread = excluded.sc_oman_spread,
+            sc_dubai_spread = excluded.sc_dubai_spread,
+            near_contract = excluded.near_contract,
+            far_contract = excluded.far_contract,
+            calendar_spread = excluded.calendar_spread,
+            structure_type = excluded.structure_type,
+            data_alignment_note = excluded.data_alignment_note,
+            source_status = excluded.source_status;
         """,
         row,
     )
@@ -427,25 +505,25 @@ def _write_evidence_database(
         row = {
             "evidence_id": str(item["evidence_id"]),
             "report_id": research_report_id,
-            "data_snapshot_id": data_snapshot_id or item.get("data_snapshot_id"),
+            "data_snapshot_id": data_snapshot_id,
             "source_name": str(item.get("source_name") or item.get("field") or "daily_input_field"),
             "source_level": item.get("source_level"),
             "evidence_type": item.get("evidence_type"),
             "publish_time": item.get("publish_time"),
             "data_time": item.get("data_time"),
-            "extracted_fact": str(item.get("extracted_fact") or item.get("field") or item["evidence_id"]),
+            "extracted_fact": _safe_extracted_fact(item),
             "raw_value": _json_text(item.get("raw_value")),
             "normalized_value": _to_float(item.get("normalized_value")),
             "unit": item.get("unit"),
             "related_variable": item.get("related_variable") or item.get("field"),
             "conclusion_impact": item.get("conclusion_impact"),
-            "confidence": item.get("confidence"),
+            "confidence": item.get("confidence") or _item_metadata(item).get("confidence"),
             "url_or_reference": item.get("url_or_reference"),
             "source_status": _valid_status(item.get("source_status")),
         }
         conn.execute(
             """
-            INSERT OR REPLACE INTO evidence_database (
+            INSERT INTO evidence_database (
                 evidence_id, report_id, data_snapshot_id, source_name, source_level,
                 evidence_type, publish_time, data_time, extracted_fact, raw_value,
                 normalized_value, unit, related_variable, conclusion_impact, confidence,
@@ -456,7 +534,24 @@ def _write_evidence_database(
                 :evidence_type, :publish_time, :data_time, :extracted_fact, :raw_value,
                 :normalized_value, :unit, :related_variable, :conclusion_impact, :confidence,
                 :url_or_reference, :source_status
-            );
+            )
+            ON CONFLICT(evidence_id) DO UPDATE SET
+                report_id = excluded.report_id,
+                data_snapshot_id = excluded.data_snapshot_id,
+                source_name = excluded.source_name,
+                source_level = excluded.source_level,
+                evidence_type = excluded.evidence_type,
+                publish_time = excluded.publish_time,
+                data_time = excluded.data_time,
+                extracted_fact = excluded.extracted_fact,
+                raw_value = excluded.raw_value,
+                normalized_value = excluded.normalized_value,
+                unit = excluded.unit,
+                related_variable = excluded.related_variable,
+                conclusion_impact = excluded.conclusion_impact,
+                confidence = excluded.confidence,
+                url_or_reference = excluded.url_or_reference,
+                source_status = excluded.source_status;
             """,
             row,
         )
@@ -485,11 +580,24 @@ def _field_date(metadata: dict[str, Any], fallback: str) -> str:
 
 
 def _source(metadata: dict[str, Any]) -> str:
-    return str(metadata.get("source_name") or metadata.get("source") or "daily_input")
+    return str(metadata.get("source_name") or metadata.get("source") or "unknown")
 
 
 def _contract(metadata: dict[str, Any], fallback: str) -> str:
     return str(metadata.get("contract") or metadata.get("symbol") or metadata.get("source_field") or fallback)
+
+
+def _contract_or_none(metadata: dict[str, Any]) -> str | None:
+    value = metadata.get("contract") or metadata.get("symbol") or metadata.get("source_field")
+    return str(value) if value is not None else None
+
+
+def _market_row_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (str(row["date"]), str(row["symbol"]), str(row["contract"]), str(row["source"]))
+
+
+def _currency_for_unit(unit: Any) -> str | None:
+    return "CNY" if str(unit) == "CNY/barrel" else None
 
 
 def _update_time(metadata: dict[str, Any]) -> str | None:
@@ -498,9 +606,11 @@ def _update_time(metadata: dict[str, Any]) -> str | None:
 
 
 def _field_status(field_name: str, fields: dict[str, Any], status_by_field: dict[str, str]) -> str:
+    metadata_status = _metadata(fields, field_name).get("source_status")
+    if metadata_status is not None:
+        return _valid_status(metadata_status)
     if field_name in status_by_field:
         return _valid_status(status_by_field[field_name])
-    metadata_status = _metadata(fields, field_name).get("source_status")
     return _valid_status(metadata_status)
 
 
@@ -540,6 +650,21 @@ def _json_text(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False)
+
+
+def _item_metadata(item: dict[str, Any]) -> dict[str, Any]:
+    metadata = item.get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _safe_extracted_fact(item: dict[str, Any]) -> str:
+    if item.get("extracted_fact"):
+        return str(item["extracted_fact"])
+    field_name = str(item.get("field") or item.get("related_variable") or "unknown")
+    value = item.get("raw_value")
+    if value is None:
+        value = item.get("normalized_value")
+    return f"Field {field_name} validated with value {value}"
 
 
 def _to_float(value: Any) -> float | None:
