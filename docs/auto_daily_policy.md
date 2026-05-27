@@ -111,6 +111,14 @@ live smoke test 只作为手动操作记录在 `docs/daily_db_persistence_runboo
 
 fail-quality run 默认不写 `market_prices`、`fx_rates` 或 `spread_table`。`evidence_database` 只有在 `research_reports` / `data_snapshot` readiness 满足且 Evidence List 存在时才写入。
 
+## v0.9 Step 0 调度触发
+
+v0.9 Step 0 增加 `scripts/run_scheduled_daily.py`，作为外部 scheduler 可调用的 trigger wrapper。它不是 daemon，不安装 cron / launchd / GitHub Actions，也不改变 Auto Daily 的计算、质检、Evidence、日报、业务表或 LLM input package 生成逻辑。
+
+该 trigger 默认开启 `--write-business-tables` 和 `--generate-llm-input-package`，并写入 `scheduled_daily_summary_v1`。同一天重复运行默认 `report_id` 时，不带 `--replace` 可能失败；这是防止静默覆盖 `research_reports` 的安全行为。
+
+调度仍然是外部且显式 opt-in。trigger 保留 no Agent、no LLM call、no trading signal、no final directional conclusion 边界。详细操作见 `docs/scheduler_trigger_runbook.md`。
+
 ## 输出约束
 
 自动生成的最终输入必须是 `daily_input_schema_v1`。自动字段必须保留来源 metadata；默认文本字段必须写明 `source_status: warning` 和 `confidence: low`。

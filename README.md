@@ -354,6 +354,36 @@ python src/pipeline/run_daily_pipeline.py \
 
 package 会保留 `overall_status`、字段 `source_status`、`confidence`、fallback / date alignment 信息和字段级 Evidence 边界。`evidence_items` 只能支持字段可用性和来源可追溯性，不能直接支持方向性市场结论。详细说明见 `docs/llm_input_package.md`。
 
+## Scheduler trigger
+
+v0.9 Step 0 增加 scheduler-safe trigger wrapper，可由 cron、launchd、GitHub Actions 或其他外部调度器调用。它不是 daemon，也不会安装系统级计划任务；只是安全地触发现有 Auto Daily，并默认开启业务表写入和 LLM input package 生成。
+
+```bash
+python scripts/run_scheduled_daily.py --report-date YYYY-MM-DD --init-db
+```
+
+同一天重复运行默认 `report_id` 时，如果不加 `--replace` 可能失败，这是避免静默覆盖日报的安全行为。本地调试可使用：
+
+```bash
+python scripts/run_scheduled_daily.py --report-date YYYY-MM-DD --replace --init-db
+```
+
+运行详情、锁文件、cron / launchd 示例和 summary 字段见 `docs/scheduler_trigger_runbook.md`。该 trigger 仍不调用 LLM、不运行 Agent、不生成交易信号或最终方向性结论。
+
+## Local Scheduler v1.0
+
+v1.0 增加 macOS LaunchAgent 作为第一个本地无人值守调度方式。它仍然调用 `scripts/run_scheduled_daily.py`，不会安装调度任务，除非你显式运行安装 helper。
+
+```bash
+python scripts/install_launchagent.py \
+  --project-root "$(pwd)" \
+  --python-executable "$(which python)" \
+  --hour 18 \
+  --minute 30
+```
+
+LaunchAgent 环境变量很少，可能不继承 Terminal 的 conda/base 环境；`--python-executable` 建议传项目环境里的绝对 Python 路径。安装、卸载、健康检查、日志和回滚见 `docs/local_scheduler_runbook.md`。该本地调度仍不运行 Agent / LLM，不生成交易信号。
+
 ## Fetcher 契约与 AKShare SC 行情
 
 v0.5 已冻结 `raw_data_contract_v1` 和 `daily_input_schema_v1`，并新增 AKShare SC 单源行情 fetcher v1。契约边界见 `docs/contracts.md`，接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。

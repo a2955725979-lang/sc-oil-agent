@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sc-oil-agent.daily</string>
+
+  <key>WorkingDirectory</key>
+  <string>{{PROJECT_ROOT}}</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{PYTHON_EXECUTABLE}}</string>
+    <string>{{PROJECT_ROOT}}/scripts/run_scheduled_daily.py</string>
+    <string>--init-db</string>
+    <string>--lock-timeout-minutes</string>
+    <string>120</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>{{HOUR}}</integer>
+    <key>Minute</key>
+    <integer>{{MINUTE}}</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>{{PROJECT_ROOT}}/logs/launchd/sc-oil-agent.daily.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>{{PROJECT_ROOT}}/logs/launchd/sc-oil-agent.daily.err.log</string>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
