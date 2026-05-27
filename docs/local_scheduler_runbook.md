@@ -3,7 +3,7 @@
 v1.0 uses macOS LaunchAgent as the first supported local scheduler. The LaunchAgent calls:
 
 ```bash
-python scripts/run_scheduled_daily.py
+.venv/bin/python scripts/run_scheduled_daily.py
 ```
 
 This is daily-frequency automation, not intraday streaming. It does not call an LLM, run an Agent, generate trading signals, or generate automatic final directional conclusions.
@@ -12,10 +12,23 @@ This is daily-frequency automation, not intraday streaming. It does not call an 
 
 macOS LaunchAgent runs with a minimal environment and may not inherit your Terminal shell, conda/base activation, or custom `PATH`.
 
-Use an absolute Python executable path for the project environment:
+Recommended local project environment:
 
 ```bash
-which python
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+```
+
+Get the repository path:
+
+```bash
+pwd
+```
+
+For the local `.venv`, pass:
+
+```text
+/absolute/path/to/sc-oil-agent/.venv/bin/python
 ```
 
 or a conda environment path such as:
@@ -29,7 +42,7 @@ or a conda environment path such as:
 ```bash
 python scripts/install_launchagent.py \
   --project-root "$(pwd)" \
-  --python-executable "$(which python)" \
+  --python-executable "$(pwd)/.venv/bin/python" \
   --dry-run
 ```
 
@@ -40,7 +53,7 @@ Dry run renders the plist preview and prints next steps without writing files or
 ```bash
 python scripts/install_launchagent.py \
   --project-root "$(pwd)" \
-  --python-executable "$(which python)" \
+  --python-executable "$(pwd)/.venv/bin/python" \
   --hour 18 \
   --minute 30
 ```
@@ -75,7 +88,7 @@ You can also ask the helper to load after rendering:
 ```bash
 python scripts/install_launchagent.py \
   --project-root "$(pwd)" \
-  --python-executable "$(which python)" \
+  --python-executable "$(pwd)/.venv/bin/python" \
   --hour 18 \
   --minute 30 \
   --load

@@ -3,7 +3,7 @@
 v0.9 Step 0 adds a scheduler-safe trigger wrapper:
 
 ```bash
-python scripts/run_scheduled_daily.py --init-db
+.venv/bin/python scripts/run_scheduled_daily.py --init-db
 ```
 
 This script is not a scheduler daemon. It does not install cron jobs, LaunchAgents, GitHub Actions, or background services. External schedulers may call it.
@@ -22,7 +22,7 @@ It does not call an LLM, run an Agent, generate trading signals, generate final 
 ## Local Command
 
 ```bash
-python scripts/run_scheduled_daily.py \
+.venv/bin/python scripts/run_scheduled_daily.py \
   --report-date YYYY-MM-DD \
   --init-db
 ```
@@ -36,7 +36,7 @@ RPT-YYYYMMDD-SC-DAILY-SCHEDULED
 If that report already exists, rerunning without `--replace` may fail. That is intentional safety behavior, not a bug. For local debugging:
 
 ```bash
-python scripts/run_scheduled_daily.py \
+.venv/bin/python scripts/run_scheduled_daily.py \
   --report-date YYYY-MM-DD \
   --replace \
   --init-db
@@ -90,13 +90,13 @@ The lock stores:
 Default timeout is 120 minutes:
 
 ```bash
-python scripts/run_scheduled_daily.py --lock-timeout-minutes 120
+.venv/bin/python scripts/run_scheduled_daily.py --lock-timeout-minutes 120
 ```
 
 If the lock is younger than the timeout, the trigger exits with scheduler guard code `3`. If the lock is older than the timeout, it is reported as stale but is not deleted automatically. To remove a stale lock and run:
 
 ```bash
-python scripts/run_scheduled_daily.py \
+.venv/bin/python scripts/run_scheduled_daily.py \
   --report-date YYYY-MM-DD \
   --force-unlock \
   --init-db
@@ -107,7 +107,7 @@ python scripts/run_scheduled_daily.py \
 This example runs on weekdays at 18:30 local machine time. Adjust paths and environment activation as needed:
 
 ```cron
-30 18 * * 1-5 cd /path/to/sc-oil-agent && /usr/bin/python3 scripts/run_scheduled_daily.py --init-db >> logs/scheduled_daily.log 2>&1
+30 18 * * 1-5 cd /path/to/sc-oil-agent && /path/to/sc-oil-agent/.venv/bin/python scripts/run_scheduled_daily.py --init-db >> logs/scheduled_daily.log 2>&1
 ```
 
 ## macOS launchd Reference
@@ -116,7 +116,7 @@ No plist is installed by this repository. A LaunchAgent can call the same comman
 
 ```bash
 cd /path/to/sc-oil-agent
-/usr/bin/python3 scripts/run_scheduled_daily.py --init-db
+/path/to/sc-oil-agent/.venv/bin/python scripts/run_scheduled_daily.py --init-db
 ```
 
 Keep `WorkingDirectory` set to the repository root if you create a plist manually.
