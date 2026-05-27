@@ -74,6 +74,12 @@ python src/pipeline/run_auto_daily.py \
 
 Mode B may fail or warn because live providers are free/public and can be stale, unavailable, rate-limited, or misaligned with holidays and trading sessions. Yahoo/yfinance is a free public convenience provider, not an official exchange source or terminal-grade data source.
 
+For v0.7.1 real-date smoke validation, use `docs/real_date_smoke_test_runbook.md` and the helper command:
+
+```bash
+python scripts/run_real_date_smoke.py --report-date YYYY-MM-DD --init-db
+```
+
 ## Summary Audit
 
 The business write summary is the row-count audit trail. It includes:

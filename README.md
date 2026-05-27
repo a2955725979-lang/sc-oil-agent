@@ -317,6 +317,16 @@ python src/pipeline/run_auto_daily.py \
 
 个人日常验收与操作 runbook 见 `docs/daily_db_persistence_runbook.md`。这是 v0.7 Step 3 的 acceptance path：`--write-business-tables` 显式启用业务库持久化，默认 pipeline 仍保持安全关闭；`business_write_summary` 提供每次写入的行数审计。
 
+## Real-date smoke test
+
+v0.7.1 增加手动 real-date smoke test，用于验证真实 AKShare + market_fx provider 能否跑通 auto daily、日报生成和业务库持久化。该 smoke test 不进入 CI，不做调度，不验证交易准确性，也不生成交易信号。
+
+```bash
+python scripts/run_real_date_smoke.py --report-date YYYY-MM-DD --init-db
+```
+
+详细步骤、绿 / 黄 / 红验收标准和手工 SQL 检查见 `docs/real_date_smoke_test_runbook.md`。
+
 ## Fetcher 契约与 AKShare SC 行情
 
 v0.5 已冻结 `raw_data_contract_v1` 和 `daily_input_schema_v1`，并新增 AKShare SC 单源行情 fetcher v1。契约边界见 `docs/contracts.md`，接口设计见 `docs/fetcher_design.md`，样例见 `data/samples/fetchers/`。
